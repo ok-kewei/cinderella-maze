@@ -1,0 +1,23 @@
+name: Check
+
+# Runs on every pull request (and on main) so broken changes can't be merged or deployed.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check the game
+        run: node scripts/check.mjs
+      - name: Build the site
+        run: node scripts/build.mjs

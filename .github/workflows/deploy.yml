@@ -1,0 +1,37 @@
+name: Deploy
+
+# Publishes the game to AWS whenever a change lands on main (normally by merging a pull request).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write # lets GitHub sign in to AWS with a short-lived token (no stored keys)
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check the game
+        run: node scripts/check.mjs
+      - name: Build the site
+        run: node scripts/build.mjs
+      - name: Sign in to AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Upload to S3
+        run: aws s3 sync dist/ "s3://${{ vars.SITE_BUCKET }}" --delete --cache-control "no-cache"
+      - name: Refresh CloudFront
+        run: aws cloudfront create-invalidation --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" --paths "/*"
