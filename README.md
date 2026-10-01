@@ -16,15 +16,6 @@ A free, fast-paced arcade maze chase through the royal palace, inspired by a cla
 - **Twirl past the family:** Space
 - **On a phone:** swipe, or use the on-screen pad
 
-## 🎮 Key Features
-
-- **Classic arcade action:** sprint through the palace maze in a high-stakes chase.
-- **Turn the tables:** grab a glass slipper to transform the stepfamily into harmless mice and reverse the hunt.
-- **A fairy-tale journey:** 20 levels, each with its own line of the story and its own surprises from the tale.
-- **A magic twirl:** a burst of speed that slips Cinderella past the family when she's cornered.
-- **Easy mode** for younger players, and a **Top 10** of the best scores.
-- **100% free to play:** the whole story and every level, with no ads or paywalls.
-
 ## 🚀 Live Game
 
 - **Play:** https://djupknnfwqky.cloudfront.net
@@ -38,7 +29,7 @@ A free, fast-paced arcade maze chase through the royal palace, inspired by a cla
 - **Design & prototyping:** built with Claude, using claude.ai artifacts for previews.
 
 ```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 500}}}%%
+%%{init: {"flowchart": {"wrappingWidth": 500, "nodeSpacing": 14, "rankSpacing": 20, "padding": 8, "subGraphTitleMargin": {"top": 6, "bottom": 10}}}}%%
 flowchart TD
   subgraph GH["GitHub"]
     A["✏️ Change the game on a branch"] --> B["🔀 Pull request: the Check workflow tests it"]
@@ -46,14 +37,12 @@ flowchart TD
     C --> D["🚀 Deploy workflow builds the page"]
   end
   subgraph AWS["AWS"]
-    E["🔑 Sign in with a short-lived token"] --> F[("🗄️ S3 stores the game privately")]
+    E["🔑 Sign in with a short-lived token"] --> F["🗄️ S3 stores the game privately"]
     F --> G["🌍 CloudFront serves it over HTTPS"]
   end
   D --> E
-  G --> H(("🎮 Players"))
+  G --> H["🎮 Players"]
 ```
-
-The game runs entirely in the player's browser; there is no server. Top 10 scores are kept in each player's own browser on this site.
 
 ## ⚙️ Installation & Local Setup
 
