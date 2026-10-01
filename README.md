@@ -56,10 +56,12 @@ You need [Node.js](https://nodejs.org) (version 18 or later).
 
    ```bash
    node scripts/check.mjs   # makes sure the game's code has no errors
-   node scripts/build.mjs   # creates the playable page at dist/index.html
+   node scripts/build.mjs   # builds the playable page
    ```
 
-3. **Open `dist/index.html` in your browser** (double-click it, or drag it into a browser window).
+   The build creates a new folder, `dist`, with one file inside: `index.html`. That's the game (`cinderella-maze.html`) wrapped as a complete web page, ready for a browser. The `dist` folder isn't stored in git, because the build can always recreate it.
+
+3. **Play it:** open `dist/index.html` in your web browser, for example by double-clicking it in your file manager.
 
 ## 📦 CI/CD & Deployment Guide
 
@@ -79,32 +81,44 @@ Deploys sign in to AWS with a short-lived token (OIDC), so no AWS keys or passwo
 <details>
 <summary><strong>Setting up AWS from scratch with CloudFormation</strong></summary>
 
-Everything on AWS is created from one CloudFormation template, `infra/site.yaml`.
+Everything on AWS is created from one CloudFormation template, `infra/site.yaml`. You run it from your own computer with the AWS command-line tool, and AWS creates all the resources as one **stack** called `cinderella-maze`.
 
-1. Look up the repository's permanent ids, which GitHub includes when it signs in to AWS:
+**You need**
+
+- The [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), signed in to your AWS account with permission to create resources. Check with `aws sts get-caller-identity`, which should print your account.
+- The [GitHub CLI](https://cli.github.com) (`gh`), signed in with `gh auth login`.
+
+Run each command below in a terminal, **inside the project folder** (`cinderella-maze`).
+
+1. **Find the repository's ids.** GitHub includes them when it signs in to AWS, so the template needs them. For this repository:
 
    ```bash
-   gh api repos/<github-user>/<repo> --jq '.owner.id, .id'
+   gh api repos/ok-kewei/cinderella-maze --jq '.owner.id, .id'
    ```
 
-2. Create the AWS resources from the template (this creates the CloudFormation stack):
+   This only reads information from GitHub. It prints two numbers: the first is the owner id, the second is the repository id.
+
+2. **Create the stack.** Replace the values in `<...>` with your own (the two ids from step 1, and the email that should receive cost alerts):
 
    ```bash
    aws cloudformation deploy \
      --stack-name cinderella-maze \
      --template-file infra/site.yaml \
      --capabilities CAPABILITY_NAMED_IAM \
-     --parameter-overrides GitHubOwner=<github-user> GitHubRepo=<repo> \
-       GitHubOwnerId=<owner-id> GitHubRepoId=<repo-id> BudgetEmail=<email>
+     --region us-east-1 \
+     --parameter-overrides GitHubOwner=ok-kewei GitHubRepo=cinderella-maze \
+       GitHubOwnerId=<owner-id> GitHubRepoId=<repo-id> BudgetEmail=<your-email>
    ```
 
-3. Read the four values from the stack's outputs:
+   It takes a few minutes and finishes with `Successfully created/updated stack - cinderella-maze`. You can also follow it in the AWS Console under **CloudFormation → Stacks**. Running the same command again later updates the stack with any changes to the template.
+
+3. **Give GitHub the values it needs to deploy.** Read them from the stack's outputs:
 
    ```bash
-   aws cloudformation describe-stacks --stack-name cinderella-maze --query "Stacks[0].Outputs"
+   aws cloudformation describe-stacks --stack-name cinderella-maze --region us-east-1 --query "Stacks[0].Outputs"
    ```
 
-   and add them under **Settings → Secrets and variables → Actions → Variables**. They are not secret; they tell the Deploy workflow where to upload:
+   and add them under **Settings → Secrets and variables → Actions → Variables** in the GitHub repository. They are not secret; they tell the Deploy workflow where to upload:
 
    | Variable | What it is |
    |---|---|
