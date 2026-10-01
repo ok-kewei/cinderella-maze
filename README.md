@@ -77,7 +77,9 @@ The game deploys to AWS automatically whenever a change is merged into the `main
 Deploys sign in to AWS with a short-lived token (OIDC), so no AWS keys or passwords are stored in GitHub.
 
 <details>
-<summary><strong>Setting up AWS from scratch</strong> (already done; only needed to rebuild everything)</summary>
+<summary><strong>Setting up AWS from scratch with CloudFormation</strong></summary>
+
+Everything on AWS is created from one CloudFormation template, `infra/site.yaml`.
 
 1. Look up the repository's permanent ids, which GitHub includes when it signs in to AWS:
 
@@ -85,7 +87,7 @@ Deploys sign in to AWS with a short-lived token (OIDC), so no AWS keys or passwo
    gh api repos/<github-user>/<repo> --jq '.owner.id, .id'
    ```
 
-2. Create the AWS resources from the template:
+2. Create the AWS resources from the template (this creates the CloudFormation stack):
 
    ```bash
    aws cloudformation deploy \
