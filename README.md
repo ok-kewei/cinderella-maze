@@ -1,6 +1,6 @@
 # Cinderella's Midnight Maze
 
-A free arcade maze chase through the palace. Collect every pearl before the stepfamily catches you, grab a glass slipper to turn them into mice, and play through 20 levels of the tale to reach the happily-ever-after ending.
+Help Cinderella race through the palace at midnight! Collect every pearl, dodge her stepfamily, and grab a glass slipper to turn them into mice. Twenty levels later, a happily-ever-after awaits.
 
 ### ▶ [Play the game](https://djupknnfwqky.cloudfront.net)
 
