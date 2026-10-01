@@ -21,7 +21,7 @@ node scripts/build.mjs   # writes dist/index.html for deployment
 2. Publish to the claude.ai preview so the owner can try it: artifact https://claude.ai/artifact/793VZJ3ezmG33sFde1tvd7 (publish with that `url`; declared capabilities `db` and `user` carry forward). The owner reviews there before anything goes public.
 3. Commit, open a pull request; the **Check** workflow runs. Merging to `main` runs **Deploy**, which uploads to S3 and refreshes CloudFront.
 
-## AWS (CloudFormation stack `cinderella-maze`, us-east-1, account 374788852394)
+## AWS (CloudFormation stack `cinderella-maze`, us-east-1)
 
 - Site: https://djupknnfwqky.cloudfront.net (private S3 bucket behind CloudFront with Origin Access Control; HTTPS only).
 - GitHub deploys through OIDC (no stored keys); the role only trusts `ok-kewei/cinderella-maze` on `main`.
