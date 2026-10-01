@@ -38,15 +38,16 @@ A free, fast-paced arcade maze chase through the royal palace, inspired by a cla
 - **Design & prototyping:** built with Claude, using claude.ai artifacts for previews.
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 500}}}%%
 flowchart TD
   subgraph GH["GitHub"]
-    A["✏️ Change the game<br/>on a branch"] --> B["🔀 Pull request<br/>the Check workflow tests it"]
+    A["✏️ Change the game on a branch"] --> B["🔀 Pull request: the Check workflow tests it"]
     B --> C["✅ Merge into main"]
-    C --> D["🚀 Deploy workflow<br/>builds the page"]
+    C --> D["🚀 Deploy workflow builds the page"]
   end
   subgraph AWS["AWS"]
-    E["🔑 Sign in with a<br/>short-lived token"] --> F[("🗄️ S3<br/>stores the game privately")]
-    F --> G["🌍 CloudFront<br/>serves it over HTTPS"]
+    E["🔑 Sign in with a short-lived token"] --> F[("🗄️ S3 stores the game privately")]
+    F --> G["🌍 CloudFront serves it over HTTPS"]
   end
   D --> E
   G --> H(("🎮 Players"))
