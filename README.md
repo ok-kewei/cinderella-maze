@@ -1,6 +1,6 @@
 # Cinderella's Midnight Maze
 
-Help Cinderella race through the palace at midnight! Collect every pearl, dodge her stepfamily, and grab a glass slipper to turn them into mice. Twenty levels later, a happily-ever-after awaits.
+Once upon a midnight, the ball was waiting and the stepfamily was close behind. Help Cinderella gather every pearl in the palace halls, let a glass slipper's magic turn her pursuers into mice, and follow the tale through 20 levels, all the way to happily ever after.
 
 ### ▶ [Play the game](https://djupknnfwqky.cloudfront.net)
 
