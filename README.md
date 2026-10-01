@@ -31,8 +31,12 @@ node scripts/build.mjs
      --stack-name cinderella-maze \
      --template-file infra/site.yaml \
      --capabilities CAPABILITY_NAMED_IAM \
-     --parameter-overrides GitHubOwner=<github-user> GitHubRepo=<repo> BudgetEmail=<email>
+     --parameter-overrides GitHubOwner=<github-user> GitHubRepo=<repo> \
+       GitHubOwnerId=<owner-id> GitHubRepoId=<repo-id> BudgetEmail=<email>
    ```
+
+   GitHub identifies the repository by its permanent ids when deploying; find them with
+   `gh api repos/<github-user>/<repo> --jq '.owner.id, .id'`.
 
 2. In the GitHub repository, add these under **Settings → Secrets and variables → Actions → Variables**, using the stack's outputs (`aws cloudformation describe-stacks --stack-name cinderella-maze --query "Stacks[0].Outputs"`):
    `AWS_DEPLOY_ROLE_ARN`, `AWS_REGION`, `SITE_BUCKET`, `CLOUDFRONT_DISTRIBUTION_ID`.
