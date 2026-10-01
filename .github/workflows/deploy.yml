@@ -24,6 +24,8 @@ jobs:
           node-version: 20
       - name: Check the game
         run: node scripts/check.mjs
+      - name: Test the Top 10 API
+        run: node --test api/test/*.test.mjs
       - name: Build the site
         run: node scripts/build.mjs
       - name: Sign in to AWS
@@ -31,7 +33,15 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
+      # The API goes first, so the new page never talks to an old API.
+      - name: Update the Top 10 API
+        run: |
+          (cd api && zip -q -X "$RUNNER_TEMP/api.zip" *.mjs)
+          aws lambda update-function-code --function-name "${{ vars.API_FUNCTION_NAME }}" --zip-file "fileb://$RUNNER_TEMP/api.zip" > /dev/null
+          aws lambda wait function-updated-v2 --function-name "${{ vars.API_FUNCTION_NAME }}"
       - name: Upload to S3
         run: aws s3 sync dist/ "s3://${{ vars.SITE_BUCKET }}" --delete --cache-control "no-cache"
       - name: Refresh CloudFront
         run: aws cloudfront create-invalidation --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" --paths "/*"
+      - name: Smoke test the live site
+        run: node scripts/smoke.mjs "${{ vars.SITE_URL }}"
