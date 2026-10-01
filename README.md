@@ -84,7 +84,7 @@ Deploys sign in to AWS with a short-lived token (OIDC), so no AWS keys or passwo
 Everything on AWS is created from one CloudFormation template, `infra/site.yaml`. You run it from your own computer with the AWS command-line tool, and AWS creates all the resources as one **stack** called `cinderella-maze`. Run each command below in a terminal, **inside the project folder** (`cinderella-maze`).
 
 1. **Sign in to AWS and GitHub on the command line.**
-   - Install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and sign in to your AWS account (for example with `aws configure`). Your user needs permission to create resources. Check with `aws sts get-caller-identity`, which should print your account.
+   - Install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and sign in to your AWS account (for example with `aws configure`). The AWS user you sign in as needs permission to create S3, CloudFront, IAM and Budgets resources. `aws sts get-caller-identity` shows which account and user the CLI is signed in as.
    - Install the [GitHub CLI](https://cli.github.com) and sign in with `gh auth login`.
 
 2. **Find the repository's id numbers.** GitHub includes them when it signs in to AWS, so the template needs them:
@@ -93,7 +93,14 @@ Everything on AWS is created from one CloudFormation template, `infra/site.yaml`
    gh api repos/ok-kewei/cinderella-maze --jq '.owner.id, .id'
    ```
 
-   `gh api` asks GitHub for the repository's details, and `--jq '.owner.id, .id'` picks out two numbers from the reply: first the owner's (account's) id, then the repository's id. It only reads; nothing changes.
+   `gh api` asks GitHub for the repository's details, which come back as JSON. `--jq` filters that JSON before printing it, using [jq](https://jqlang.org) syntax (built into `gh`): `.owner.id` is the account's id and `.id` is the repository's id. It prints the two numbers, one per line, for example:
+
+   ```text
+   43628709      <- owner id
+   1399184698    <- repository id
+   ```
+
+   It only reads from GitHub; nothing changes.
 
 3. **Create the stack.** Put in the two numbers from step 2 and the email that should receive cost alerts:
 
@@ -107,7 +114,7 @@ Everything on AWS is created from one CloudFormation template, `infra/site.yaml`
        GitHubOwnerId=<owner-id> GitHubRepoId=<repo-id> BudgetEmail=<your-email>
    ```
 
-   `--capabilities CAPABILITY_NAMED_IAM` is your acknowledgement that the template creates IAM resources (the GitHub sign-in link and the deploy role), which grant permissions in your account; CloudFormation won't create them without it.
+   `--capabilities CAPABILITY_NAMED_IAM` is a fixed CloudFormation keyword you type to acknowledge that the template creates IAM resources (the GitHub sign-in link and the deploy role), which grant permissions in your account. CloudFormation won't create them without it.
 
    It takes a few minutes and finishes with `Successfully created/updated stack - cinderella-maze`. You can also follow it in the AWS Console under **CloudFormation → Stacks**. Running the same command again later updates the stack with any changes to the template.
 
