@@ -33,7 +33,6 @@ node scripts/build.mjs   # writes dist/index.html for deployment
 
 - **No Disney names or Disney-only material**, anywhere (visible text, code, comments, commits). Use: the Stepmother, Griselda, Petunia, Soot (cat), Pip and Crumb (mice), Barley (dog), "ABRACADABRA!". Traditional fairy-tale elements are fine: Cinderella, Prince Charming, the Fairy Godmother, the Grand Duke, the glass slipper, the pumpkin coach, midnight.
 - **Never write "Pac-Man"** in the game, the page description, the site or commit messages.
-- **The maze is the original arcade layout.** The owner chose this knowingly and accepts a possible takedown request; an original simple maze is saved in `previews/maze-new-preview.html` as a ready backup.
 - **Surprises stay surprises:** the How to play pop-up never mentions which level a feature starts on, and there are no "New!" hints.
 - **No real Disney songs or film quotes.** All music is original; story lines follow the tale in our own words.
 - **Speeds follow the classic arcade table** (`SPEEDS` in the script), with no per-pearl pause, so Cinderella is always a little faster than the family.
