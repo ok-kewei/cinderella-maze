@@ -4,7 +4,7 @@ A free arcade maze chase through the palace. Collect every pearl before the step
 
 ### ▶ [Play the game](https://djupknnfwqky.cloudfront.net)
 
-[![The game mid-level: Cinderella in the maze, the stepfamily chasing her, pearls and glass slippers around the halls](docs/screenshot.png)](https://djupknnfwqky.cloudfront.net)
+[![A few seconds of play: Cinderella collects pearls, grabs a glass slipper, and chases the stepfamily, now mice, around the maze](docs/gameplay.gif)](https://djupknnfwqky.cloudfront.net)
 
 Arrow keys or WASD to move, Space to twirl past the family. On a phone, swipe or use the on-screen pad.
 
