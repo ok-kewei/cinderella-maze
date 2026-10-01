@@ -81,24 +81,21 @@ Deploys sign in to AWS with a short-lived token (OIDC), so no AWS keys or passwo
 <details>
 <summary><strong>Setting up AWS from scratch with CloudFormation</strong></summary>
 
-Everything on AWS is created from one CloudFormation template, `infra/site.yaml`. You run it from your own computer with the AWS command-line tool, and AWS creates all the resources as one **stack** called `cinderella-maze`.
+Everything on AWS is created from one CloudFormation template, `infra/site.yaml`. You run it from your own computer with the AWS command-line tool, and AWS creates all the resources as one **stack** called `cinderella-maze`. Run each command below in a terminal, **inside the project folder** (`cinderella-maze`).
 
-**You need**
+1. **Sign in to AWS and GitHub on the command line.**
+   - Install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and sign in to your AWS account (for example with `aws configure`). Your user needs permission to create resources. Check with `aws sts get-caller-identity`, which should print your account.
+   - Install the [GitHub CLI](https://cli.github.com) and sign in with `gh auth login`.
 
-- The [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), signed in to your AWS account with permission to create resources. Check with `aws sts get-caller-identity`, which should print your account.
-- The [GitHub CLI](https://cli.github.com) (`gh`), signed in with `gh auth login`.
-
-Run each command below in a terminal, **inside the project folder** (`cinderella-maze`).
-
-1. **Find the repository's ids.** GitHub includes them when it signs in to AWS, so the template needs them. For this repository:
+2. **Find the repository's id numbers.** GitHub includes them when it signs in to AWS, so the template needs them:
 
    ```bash
    gh api repos/ok-kewei/cinderella-maze --jq '.owner.id, .id'
    ```
 
-   This only reads information from GitHub. It prints two numbers: the first is the owner id, the second is the repository id.
+   `gh api` asks GitHub for the repository's details, and `--jq '.owner.id, .id'` picks out two numbers from the reply: first the owner's (account's) id, then the repository's id. It only reads; nothing changes.
 
-2. **Create the stack.** Replace the values in `<...>` with your own (the two ids from step 1, and the email that should receive cost alerts):
+3. **Create the stack.** Put in the two numbers from step 2 and the email that should receive cost alerts:
 
    ```bash
    aws cloudformation deploy \
@@ -110,21 +107,25 @@ Run each command below in a terminal, **inside the project folder** (`cinderella
        GitHubOwnerId=<owner-id> GitHubRepoId=<repo-id> BudgetEmail=<your-email>
    ```
 
+   `--capabilities CAPABILITY_NAMED_IAM` is your acknowledgement that the template creates IAM resources (the GitHub sign-in link and the deploy role), which grant permissions in your account; CloudFormation won't create them without it.
+
    It takes a few minutes and finishes with `Successfully created/updated stack - cinderella-maze`. You can also follow it in the AWS Console under **CloudFormation → Stacks**. Running the same command again later updates the stack with any changes to the template.
 
-3. **Give GitHub the values it needs to deploy.** Read them from the stack's outputs:
+4. **Give GitHub the values it needs to deploy.** Read them from the stack's outputs:
 
    ```bash
    aws cloudformation describe-stacks --stack-name cinderella-maze --region us-east-1 --query "Stacks[0].Outputs"
    ```
 
-   and add them under **Settings → Secrets and variables → Actions → Variables** in the GitHub repository. They are not secret; they tell the Deploy workflow where to upload:
+   Then add each one as a repository variable, either on the website (**Settings → Secrets and variables → Actions → Variables → New repository variable**) or with `gh`, for example `gh variable set AWS_REGION --body us-east-1`. They are not secret; they tell the Deploy workflow where to upload:
 
-   | Variable | What it is |
+   | Variable | Value (from the stack's outputs) |
    |---|---|
-   | `AWS_DEPLOY_ROLE_ARN` | The deploy role GitHub signs in as |
-   | `AWS_REGION` | The AWS region, `us-east-1` |
-   | `SITE_BUCKET` | The S3 bucket that stores the game |
-   | `CLOUDFRONT_DISTRIBUTION_ID` | The CloudFront site to refresh after each upload |
+   | `AWS_DEPLOY_ROLE_ARN` | `DeployRoleArn`: the deploy role GitHub signs in as |
+   | `AWS_REGION` | `us-east-1` |
+   | `SITE_BUCKET` | `BucketName`: the S3 bucket that stores the game |
+   | `CLOUDFRONT_DISTRIBUTION_ID` | `DistributionId`: the CloudFront site to refresh after each upload |
+
+**How the OIDC sign-in is set up.** There's nothing to configure by hand. The template creates both pieces on AWS: the identity provider that trusts GitHub's tokens, and the deploy role, which only accepts tokens from this repository's `main` branch. On GitHub, `deploy.yml` already asks for a token (`permissions: id-token: write`) and signs in with the role from `AWS_DEPLOY_ROLE_ARN`. Once steps 1 to 4 are done, the next merge to `main` deploys.
 
 </details>
