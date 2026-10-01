@@ -1,46 +1,138 @@
-# Cinderella's Midnight Maze
+# 🏰 Cinderella's Midnight Maze
 
-A free arcade maze chase through the palace. Collect every pearl, grab a glass slipper to turn the stepfamily into mice, and reach level 20 for the happily-ever-after ending.
+**The clock strikes midnight!** The stepfamily is chasing Cinderella through the palace halls. Collect every pearl, grab a glass slipper to turn them into mice, and outrun them through 20 levels to reach her happily ever after.
 
-## Files
+### ▶ [Play the game](https://djupknnfwqky.cloudfront.net)
 
-| Path | What it is |
-|---|---|
-| `cinderella-maze.html` | The whole game: one page with its own styles and script |
-| `scripts/check.mjs` | Checks the game's script for errors and that required page elements exist |
-| `scripts/build.mjs` | Wraps the game into a complete web page at `dist/index.html` |
-| `infra/site.yaml` | AWS CloudFormation template: private S3 bucket, CloudFront (HTTPS), GitHub deploy role, cost alert |
-| `.github/workflows/check.yml` | Runs the check and build on every pull request |
-| `.github/workflows/deploy.yml` | Deploys to AWS when a change lands on `main` |
-| `previews/` | Design preview pages (kept locally, not in git) |
+[![Ten seconds of level 17: the Grand Duke walks the halls, the midnight clock turns the pearls gold, the sisters' music lesson, the Fairy Godmother's spell, and Cinderella chasing the stepfamily as mice](docs/gameplay.gif)](https://djupknnfwqky.cloudfront.net)
 
-## Run it locally
+## 📖 Game Overview
 
-```bash
-node scripts/check.mjs
-node scripts/build.mjs
-# then open dist/index.html in a browser
+A free, fast-paced arcade maze chase through the royal palace, inspired by a classic fairy tale. Guide Cinderella through the twisting royal halls, outrun her wicked stepfamily, gather all the pearls, and snag a magical glass slipper to turn your pursuers into mice. Clear all 20 levels to claim your happily-ever-after ending!
+
+**How to play**
+
+- **Move:** arrow keys or W A S D
+- **Twirl past the family:** Space
+- **On a phone:** swipe, or use the on-screen pad
+
+## 🛠️ Tech Stack & Architecture
+
+- **Game:** HTML5 Canvas and plain JavaScript in a single page (`cinderella-maze.html`), with no framework and no image files. Music and sound effects are generated with the Web Audio API.
+- **Hosting & delivery:** AWS S3 (private storage) behind AWS CloudFront (CDN, HTTPS).
+- **Infrastructure as code:** one AWS CloudFormation template, `infra/site.yaml`.
+- **CI/CD:** GitHub Actions.
+- **Tooling:** Node.js runs the two small helper scripts that check and build the page. Players don't need it.
+- **Design & prototyping:** built with Claude, using claude.ai artifacts for previews.
+
+```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 500, "nodeSpacing": 14, "rankSpacing": 20, "padding": 8, "subGraphTitleMargin": {"top": 6, "bottom": 10}}}}%%
+flowchart TD
+  subgraph GH["GitHub"]
+    A["✏️ Change the game on a branch"] --> B["🔀 Pull request: the Check workflow tests it"]
+    B --> C["✅ Merge into main"]
+    C --> D["🚀 Deploy workflow builds the page"]
+  end
+  subgraph AWS["AWS"]
+    E["🔑 AWS checks the token and lends a temporary key"] --> F["🗄️ S3 stores the game privately"]
+    F --> G["🌍 CloudFront serves it over HTTPS"]
+  end
+  D -- "🤝 OIDC handshake" ---> E
+  G --> H["🎮 Players"]
 ```
 
-## Deploying
+## ⚙️ Installation & Local Setup
 
-1. Create the AWS resources once:
+You need [Node.js](https://nodejs.org) (version 18 or later).
+
+1. **Clone the repository**
+
+   ```bash
+   git clone https://github.com/ok-kewei/cinderella-maze.git
+   cd cinderella-maze
+   ```
+
+2. **Check and build the game**
+
+   ```bash
+   node scripts/check.mjs   # makes sure the game's code has no errors
+   node scripts/build.mjs   # builds the playable page
+   ```
+
+   The build creates a new folder, `dist`, with one file inside: `index.html`. That's the game (`cinderella-maze.html`) wrapped as a complete web page, ready for a browser. The `dist` folder isn't stored in git, because the build can always recreate it.
+
+3. **Play it:** open `dist/index.html` in your web browser, for example by double-clicking it in your file manager.
+
+## 📦 CI/CD & Deployment Guide
+
+The game deploys to AWS automatically whenever a change is merged into the `main` branch.
+
+### Workflows
+
+- **Check** (`.github/workflows/check.yml`) runs on every pull request: it checks the game's code for errors and builds the page.
+- **Deploy** (`.github/workflows/deploy.yml`) runs on every merge to `main`:
+  1. checks and builds the game,
+  2. signs in to AWS (see below),
+  3. uploads the page to the S3 bucket,
+  4. refreshes CloudFront so players get the new version within about a minute.
+
+Deploys sign in to AWS with a short-lived token (OIDC), so no AWS keys or passwords are stored in GitHub.
+
+<details>
+<summary><strong>Setting up AWS from scratch with CloudFormation</strong></summary>
+
+Everything on AWS is created from one CloudFormation template, `infra/site.yaml`. You run it from your own computer with the AWS command-line tool, and AWS creates all the resources as one **stack** called `cinderella-maze`. Run each command below in a terminal, **inside the project folder** (`cinderella-maze`).
+
+1. **Sign in to AWS and GitHub on the command line.**
+   - Install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and sign in to your AWS account (for example with `aws configure`). The AWS user you sign in as needs permission to create S3, CloudFront, IAM and Budgets resources. `aws sts get-caller-identity` shows which account and user the CLI is signed in as.
+   - Install the [GitHub CLI](https://cli.github.com) and sign in with `gh auth login`.
+
+2. **Find the repository's id numbers.** GitHub includes them when it signs in to AWS, so the template needs them:
+
+   ```bash
+   gh api repos/ok-kewei/cinderella-maze --jq '.owner.id, .id'
+   ```
+
+   `gh api` asks GitHub for the repository's details, which come back as JSON. `--jq` filters that JSON before printing it, using [jq](https://jqlang.org) syntax (built into `gh`): `.owner.id` is the account's id and `.id` is the repository's id. It prints the two numbers, one per line, for example:
+
+   ```text
+   43628709      <- owner id
+   1399184698    <- repository id
+   ```
+
+   It only reads from GitHub; nothing changes.
+
+3. **Create the stack.** Put in the two numbers from step 2 and the email that should receive cost alerts:
 
    ```bash
    aws cloudformation deploy \
      --stack-name cinderella-maze \
      --template-file infra/site.yaml \
      --capabilities CAPABILITY_NAMED_IAM \
-     --parameter-overrides GitHubOwner=<github-user> GitHubRepo=<repo> \
-       GitHubOwnerId=<owner-id> GitHubRepoId=<repo-id> BudgetEmail=<email>
+     --region us-east-1 \
+     --parameter-overrides GitHubOwner=ok-kewei GitHubRepo=cinderella-maze \
+       GitHubOwnerId=<owner-id> GitHubRepoId=<repo-id> BudgetEmail=<your-email>
    ```
 
-   GitHub identifies the repository by its permanent ids when deploying; find them with
-   `gh api repos/<github-user>/<repo> --jq '.owner.id, .id'`.
+   `--capabilities CAPABILITY_NAMED_IAM` is a fixed CloudFormation keyword you type to acknowledge that the template creates IAM resources (the GitHub sign-in link and the deploy role), which grant permissions in your account. CloudFormation won't create them without it.
 
-2. In the GitHub repository, add these under **Settings → Secrets and variables → Actions → Variables**, using the stack's outputs (`aws cloudformation describe-stacks --stack-name cinderella-maze --query "Stacks[0].Outputs"`):
-   `AWS_DEPLOY_ROLE_ARN`, `AWS_REGION`, `SITE_BUCKET`, `CLOUDFRONT_DISTRIBUTION_ID`.
+   It takes a few minutes and finishes with `Successfully created/updated stack - cinderella-maze`. You can also follow it in the AWS Console under **CloudFormation → Stacks**. Running the same command again later updates the stack with any changes to the template.
 
-3. From then on, merging a pull request into `main` publishes the game automatically.
+4. **Give GitHub the values it needs to deploy.** Read them from the stack's outputs:
 
-Scores are kept in each player's browser when the game runs outside claude.ai.
+   ```bash
+   aws cloudformation describe-stacks --stack-name cinderella-maze --region us-east-1 --query "Stacks[0].Outputs"
+   ```
+
+   Then add each one as a repository variable, either on the website (**Settings → Secrets and variables → Actions → Variables → New repository variable**) or with `gh`, for example `gh variable set AWS_REGION --body us-east-1`. They are not secret; they tell the Deploy workflow where to upload:
+
+   | Variable | Value (from the stack's outputs) |
+   |---|---|
+   | `AWS_DEPLOY_ROLE_ARN` | `DeployRoleArn`: the deploy role GitHub signs in as |
+   | `AWS_REGION` | `us-east-1` |
+   | `SITE_BUCKET` | `BucketName`: the S3 bucket that stores the game |
+   | `CLOUDFRONT_DISTRIBUTION_ID` | `DistributionId`: the CloudFront site to refresh after each upload |
+
+**How the OIDC sign-in is set up.** There's nothing to configure by hand. The template creates both pieces on AWS: the identity provider that trusts GitHub's tokens, and the deploy role, which only accepts tokens from this repository's `main` branch. On GitHub, `deploy.yml` already asks for a token (`permissions: id-token: write`) and signs in with the role from `AWS_DEPLOY_ROLE_ARN`. Once steps 1 to 4 are done, the next merge to `main` deploys.
+
+</details>
