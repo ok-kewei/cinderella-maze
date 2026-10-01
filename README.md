@@ -16,16 +16,13 @@ A free, fast-paced arcade maze chase through the royal palace, inspired by a cla
 - **Twirl past the family:** Space
 - **On a phone:** swipe, or use the on-screen pad
 
-## 🚀 Live Game
-
-- **Play:** https://djupknnfwqky.cloudfront.net
-
 ## 🛠️ Tech Stack & Architecture
 
 - **Game:** HTML5 Canvas and plain JavaScript in a single page (`cinderella-maze.html`), with no framework and no image files. Music and sound effects are generated with the Web Audio API.
 - **Hosting & delivery:** AWS S3 (private storage) behind AWS CloudFront (CDN, HTTPS).
 - **Infrastructure as code:** one AWS CloudFormation template, `infra/site.yaml`.
 - **CI/CD:** GitHub Actions.
+- **Tooling:** Node.js runs the two small helper scripts that check and build the page. Players don't need it.
 - **Design & prototyping:** built with Claude, using claude.ai artifacts for previews.
 
 ```mermaid
@@ -37,16 +34,16 @@ flowchart TD
     C --> D["🚀 Deploy workflow builds the page"]
   end
   subgraph AWS["AWS"]
-    E["🔑 Sign in with a short-lived token"] --> F["🗄️ S3 stores the game privately"]
+    E["🔑 AWS checks the token and lends a temporary key"] --> F["🗄️ S3 stores the game privately"]
     F --> G["🌍 CloudFront serves it over HTTPS"]
   end
-  D --> E
+  D -- "🤝 OIDC handshake" ---> E
   G --> H["🎮 Players"]
 ```
 
 ## ⚙️ Installation & Local Setup
 
-You need [Node.js](https://nodejs.org) (version 18 or later) and Python 3.
+You need [Node.js](https://nodejs.org) (version 18 or later).
 
 1. **Clone the repository**
 
@@ -62,14 +59,7 @@ You need [Node.js](https://nodejs.org) (version 18 or later) and Python 3.
    node scripts/build.mjs   # creates the playable page at dist/index.html
    ```
 
-3. **Run a local server**
-
-   ```bash
-   cd dist
-   python3 -m http.server 8000
-   ```
-
-4. **Open the game** at http://localhost:8000
+3. **Open `dist/index.html` in your browser** (double-click it, or drag it into a browser window).
 
 ## 📦 CI/CD & Deployment Guide
 
@@ -84,20 +74,7 @@ The game deploys to AWS automatically whenever a change is merged into the `main
   3. uploads the page to the S3 bucket,
   4. refreshes CloudFront so players get the new version within about a minute.
 
-### Signing in to AWS without stored keys
-
-GitHub signs in to AWS with **OpenID Connect (OIDC)**: on each run, GitHub issues a short-lived token proving the job comes from this repository's `main` branch, and AWS exchanges it for temporary credentials. **No AWS access keys or passwords are stored in GitHub.** The deploy role can only upload to this game's bucket and refresh its CloudFront site.
-
-### Repository variables
-
-These are set under **Settings → Secrets and variables → Actions → Variables**. They are not secret; they tell the workflow where to deploy:
-
-| Variable | What it is |
-|---|---|
-| `AWS_DEPLOY_ROLE_ARN` | The deploy role GitHub signs in as |
-| `AWS_REGION` | The AWS region, `us-east-1` |
-| `SITE_BUCKET` | The S3 bucket that stores the game |
-| `CLOUDFRONT_DISTRIBUTION_ID` | The CloudFront site to refresh after each upload |
+Deploys sign in to AWS with a short-lived token (OIDC), so no AWS keys or passwords are stored in GitHub.
 
 <details>
 <summary><strong>Setting up AWS from scratch</strong> (already done; only needed to rebuild everything)</summary>
@@ -119,10 +96,19 @@ These are set under **Settings → Secrets and variables → Actions → Variabl
        GitHubOwnerId=<owner-id> GitHubRepoId=<repo-id> BudgetEmail=<email>
    ```
 
-3. Read the four values from the stack's outputs and add them as the repository variables above:
+3. Read the four values from the stack's outputs:
 
    ```bash
    aws cloudformation describe-stacks --stack-name cinderella-maze --query "Stacks[0].Outputs"
    ```
+
+   and add them under **Settings → Secrets and variables → Actions → Variables**. They are not secret; they tell the Deploy workflow where to upload:
+
+   | Variable | What it is |
+   |---|---|
+   | `AWS_DEPLOY_ROLE_ARN` | The deploy role GitHub signs in as |
+   | `AWS_REGION` | The AWS region, `us-east-1` |
+   | `SITE_BUCKET` | The S3 bucket that stores the game |
+   | `CLOUDFRONT_DISTRIBUTION_ID` | The CloudFront site to refresh after each upload |
 
 </details>
