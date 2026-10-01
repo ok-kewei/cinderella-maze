@@ -6,7 +6,11 @@ A free arcade maze chase through the palace. Collect every pearl before the step
 
 [![Ten seconds of level 17: the Grand Duke walks the halls, the midnight clock turns the pearls gold, the sisters' music lesson, the Fairy Godmother's spell, and Cinderella chasing the stepfamily as mice](docs/gameplay.gif)](https://djupknnfwqky.cloudfront.net)
 
-Arrow keys or WASD to move, Space to twirl past the family. On a phone, swipe or use the on-screen pad.
+**How to play**
+
+- **Move:** arrow keys or W A S D
+- **Twirl past the family:** Space
+- **On a phone:** swipe, or use the on-screen pad
 
 ## How it goes live
 
