@@ -10,6 +10,12 @@ Parameters:
   GitHubRepo:
     Type: String
     Description: Repository name (without the owner).
+  GitHubOwnerId:
+    Type: String
+    Description: Numeric GitHub id of the owner (GitHub includes it in the OIDC subject).
+  GitHubRepoId:
+    Type: String
+    Description: Numeric GitHub id of the repository (GitHub includes it in the OIDC subject).
   DeployBranch:
     Type: String
     Default: main
@@ -154,7 +160,9 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubOwner}/${GitHubRepo}:ref:refs/heads/${DeployBranch}'
+                # GitHub's subject names the owner and repository with their permanent ids, so a
+                # renamed or re-created account or repository with the same name can't deploy.
+                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepo}@${GitHubRepoId}:ref:refs/heads/${DeployBranch}'
       Policies:
         - PolicyName: deploy-site
           PolicyDocument:
