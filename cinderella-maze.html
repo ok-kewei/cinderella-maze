@@ -155,8 +155,10 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   text-wrap: balance;
 }
 .card p { margin: 0; font-size: 20px; font-weight: 600; }
-.card .preview { /* the gameplay clip on the start screen: as tall as the board allows */
-  display: block; width: auto; max-width: 100%; height: min(440px, 46vh); height: min(440px, 62cqh); aspect-ratio: 320 / 411; object-fit: contain;
+.card:has(.preview) { max-width: none; } /* the start screen widens to fit its clip */
+.card .preview { /* the gameplay clip on the start screen: as big as the board allows, always in proportion */
+  display: block; aspect-ratio: 320 / 411; width: auto; max-width: none;
+  height: min(440px, 46vh); height: min(440px, 62cqh, calc((100cqw - 48px) * 411 / 320));
   border-radius: 8px; border: 1px solid rgba(201, 212, 255, .35); box-shadow: 0 6px 24px rgba(0, 0, 0, .45);
 }
 .card .score-line { font-family: var(--f-arcade); font-size: 14px; letter-spacing: .06em; color: var(--rose); }
