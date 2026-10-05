@@ -43,6 +43,7 @@ node scripts/smoke.mjs https://djupknnfwqky.cloudfront.net   # checks the live s
 - **No real Disney songs or film quotes.** All music is original; story lines follow the tale in our own words.
 - **Speeds follow the classic arcade table** (`SPEEDS` in the script), with no per-pearl pause, so Cinderella is always a little faster than the family.
 - **Look:** Starry night walls, the original maze, the sofa & tea room in the centre, pearls as the dots, the glass slipper as the power item, the family turns into mice. The owner has rejected per-level scene changes, rags instead of mice, and star-shaped sparkles.
+- **Top 10, arcade style:** a name is only asked for when the score makes its list's Top 10. "Start the night" always starts at level 1; other levels are chosen in the "Practice a level" pop-up, which says practice games don't join the Top 10. Don't use "practice" wording anywhere else on screen.
 - **Owner testing:** the game's owner (detected through the `user` capability on claude.ai) can start from any level; others unlock levels by reaching them.
 
 ## Working with the owner

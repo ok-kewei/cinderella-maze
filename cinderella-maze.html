@@ -240,6 +240,9 @@ table.board tr.gap td { text-align: center; color: var(--muted); border-bottom: 
 .easy-pick { display: flex; align-items: center; justify-content: center; gap: 8px; font-family: var(--f-arcade); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; cursor: pointer; }
 .easy-pick:has(input:checked) { border-color: var(--gold); color: var(--gold); }
 .easy-pick input { width: 18px; height: 18px; accent-color: var(--gold); }
+.link-btn { font: inherit; font-size: 17px; color: var(--muted); background: none; border: 0; padding: 4px 8px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.link-btn:hover { color: var(--ink); }
+.link-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
 .level-pick { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; font-size: 17px; color: var(--muted); }
 .level-pick select {
   font-family: var(--f-arcade); font-size: 13px; color: var(--ink); background: var(--night-2);
@@ -1419,7 +1422,7 @@ function setReached(n) { reachedHere = Math.max(reachedHere, n); if (n > (parseI
 function markReached() { setReached(G.level); }
 function unlockAll() { // testing shortcut: every level becomes available
   setReached(FINAL_LEVEL); SFX.unlock();
-  if (G.state === 'title') { showOverlay('title'); const sel = overlay.querySelector('#start-level'); if (sel) { try { sel.focus({ preventScroll: true }); } catch (e) { /* ignore */ } } }
+  if (G.state === 'title' && overlay.dataset.kind !== 'pick') showOverlay('title');
 }
 function startLevel() {
   markReached();
@@ -1428,10 +1431,10 @@ function startLevel() {
   fillDots(); G.dotsEaten = 0; resetPositions(); setState('ready', 3.2); SFX.start();
 }
 const START_KEY = 'cinderella-maze-start';
-function newGame() {
+// Starts at level 1, or at the given practice level; "Play again" after a practice game repeats its level.
+function newGame(level) {
   audio();
-  const sel = overlay.querySelector('#start-level');
-  if (sel) { G.startLevel = Math.min(PRIZES.length, Math.max(1, parseInt(sel.value, 10) || 1)); lsSet(START_KEY, G.startLevel); }
+  if (level) { G.startLevel = Math.min(PRIZES.length, Math.max(1, level)); lsSet(START_KEY, G.startLevel); }
   else if (!G.practice) G.startLevel = 1;
   G.practice = G.startLevel > 1; // games started above level 1 are practice and stay off the Top 10
   const easyBox = document.getElementById('easy-mode');
@@ -2051,7 +2054,7 @@ function update(dt) {
       }
       if (G.stateTime > 2.6) {
         G.lives--;
-        if (G.lives <= 0) { setState('gameover'); saveHigh(); if (G.practice) { G.saved = true; showOverlay('board', { practice: true }); } else showOverlay('gameover'); }
+        if (G.lives <= 0) { setState('gameover'); saveHigh(); endOfGame('gameover'); }
         else { resetPositions(); setState('ready', 1.6); }
       }
       break;
@@ -2275,7 +2278,7 @@ function updateEnding(dt) {
   if (Math.random() < dt * 6) G.particles.push({ x: W / 2 + (Math.random() - 0.5) * T * 2, y: py(16), vx: (Math.random() - 0.5) * 20, vy: -30 - Math.random() * 25, life: 0, max: 1.4, color: Math.random() < 0.5 ? '#f07aa6' : '#ffb3cf', size: 3 + Math.random() * 2, heart: true });
   if (!G.endShown && G.stateTime > 3) {
     G.endShown = true;
-    if (G.practice) { G.saved = true; showOverlay('board', { practice: true }); } else showOverlay('ending');
+    endOfGame('ending');
   }
 }
 function drawEnding(c) {
@@ -2723,25 +2726,29 @@ function renderBoardRows() {
 
 // ---------- Overlay ----------
 const overlay = document.getElementById('overlay');
+const missedTop10 = `<p>Not in the Top 10 this time.</p>
+      <div class="btn-row">
+        <button class="btn" data-action="start" type="button">Play again</button>
+        <button class="btn secondary" data-action="board" type="button">See the Top 10</button>
+      </div>`;
 function showOverlay(kind, opts) {
   let html = '';
   if (kind === 'title') {
-    const reached = reachedLevel();
     html = `<div class="card">
       <h2>Ready for the ball?</h2>
-      ${reached > 1 ? `<label class="level-pick" for="start-level">Start at level
-        <select id="start-level">${PRIZE_LIST.slice(0, reached).map((p, i) => `<option value="${i + 1}">${i + 1} · ${p[1]}</option>`).join('')}</select>
-      </label>` : ''}
       <button class="btn" data-action="start" type="button">Start the night</button>
+      ${reachedLevel() > 1 ? '<button class="link-btn" data-action="practice-pick" type="button">Practice a level</button>' : ''}
       </div>`;
-  } else if (kind === 'practice') {
+  } else if (kind === 'pick') { // practice: start from a level already reached
     html = `<div class="card">
-      <h2>The clock struck twelve</h2>
-      <p class="score-line">Practice · Score ${G.score.toLocaleString('en-US')} · Reached level ${G.level}</p>
-      <p>Practice games stay off the Top 10. Start at level 1 to set a high score.</p>
+      <h2>Practice a level</h2>
+      <label class="level-pick" for="start-level">Level
+        <select id="start-level">${PRIZE_LIST.slice(0, reachedLevel()).map((p, i) => `<option value="${i + 1}">${i + 1} · ${p[1]}</option>`).slice(1).join('')}</select>
+      </label>
+      <p class="form-note">Practice games don't join the Top 10 dancers.</p>
       <div class="btn-row">
-        <button class="btn" data-action="start" type="button">Practice again</button>
-        <button class="btn secondary" data-action="title" type="button">Change level</button>
+        <button class="btn" data-action="practice-start" type="button">Start</button>
+        <button class="btn secondary" data-action="title" type="button">Back</button>
       </div></div>`;
   } else if (kind === 'paused') {
     html = `<div class="card"><h2>Paused</h2>
@@ -2751,42 +2758,32 @@ function showOverlay(kind, opts) {
     html = `<div class="card">
       <h2>The clock struck twelve</h2>
       <p class="score-line">Score ${G.score.toLocaleString('en-US')} · Level ${G.level}</p>
-      <form class="name-form" id="name-form" novalidate>
+      ${G.saved ? missedTop10 : `<form class="name-form" id="name-form" novalidate>
         <label for="player-name">Type your name for the high score list</label>
         <input id="player-name" name="player-name" maxlength="12" autocomplete="nickname" spellcheck="false" placeholder="Your name">
         <button class="btn" type="submit" id="save-btn">Save my score</button>
       </form>
-      <p class="form-note" id="form-note" role="status"></p></div>`;
+      <p class="form-note" id="form-note" role="status"></p>`}</div>`;
   } else if (kind === 'ending') {
     html = `<div class="card">
       <h2>Happily ever after</h2>
       <p class="score-line">Final score ${G.score.toLocaleString('en-US')}</p>
       <p>You finished the whole tale!${G.endBonus ? ` Your ${G.lives} lives left added ${G.endBonus.toLocaleString('en-US')} points.` : ''}</p>
-      <form class="name-form" id="name-form" novalidate>
+      ${G.saved ? missedTop10 : `<form class="name-form" id="name-form" novalidate>
         <label for="player-name">Type your name for the Royal Ball</label>
         <input id="player-name" name="player-name" maxlength="12" autocomplete="nickname" spellcheck="false" placeholder="Your name">
         <button class="btn" type="submit" id="save-btn">Save my score</button>
       </form>
-      <p class="form-note" id="form-note" role="status"></p></div>`;
-  } else if (kind === 'ending-practice') {
-    html = `<div class="card">
-      <h2>Happily ever after</h2>
-      <p class="score-line">Practice · Score ${G.score.toLocaleString('en-US')}</p>
-      <p>You finished the tale! Start at level 1 to put your name on the Top 10.</p>
-      <div class="btn-row">
-        <button class="btn" data-action="board" type="button">See the Top 10</button>
-        <button class="btn secondary" data-action="start" type="button">Play again</button>
-        <button class="btn secondary" data-action="title" type="button">Change level</button>
-      </div></div>`;
+      <p class="form-note" id="form-note" role="status"></p>`}</div>`;
   } else if (kind === 'board') {
     const mine = opts && opts.mine;
     const rankLine = mine && mine.rank ? '<p class="rank-line"></p>' : '';
     const over = (G.state === 'gameover' || G.state === 'ending') && G.saved;
     const buttons = over && G.practice
-      ? `<button class="btn" data-action="start" type="button">Practice again</button><button class="btn secondary" data-action="title" type="button">Change level</button>`
+      ? `<button class="btn" data-action="start" type="button">Play again</button><button class="btn secondary" data-action="practice-pick" type="button">Change level</button>`
       : over ? `<button class="btn" data-action="start" type="button">Play again</button>`
       : `<button class="btn secondary" data-action="close-board" type="button">Back</button>`;
-    const practiceLine = over && G.practice ? `<p class="rank-line">Practice score ${G.score.toLocaleString('en-US')}, not added to the list</p>` : '';
+    const practiceLine = over && G.practice ? `<p class="rank-line">Score ${G.score.toLocaleString('en-US')}</p>` : '';
     html = `<div class="card wide guest-list">
       <canvas class="crest" width="44" height="34" aria-hidden="true"></canvas>
       <h2>The Royal Ball</h2>
@@ -2812,21 +2809,30 @@ function showOverlay(kind, opts) {
     if (crest) { crest.width = 44 * dpr; crest.height = 34 * dpr; const k = crest.getContext('2d'); k.scale(dpr, dpr); drawPrize(k, FINAL_LEVEL, 22, 18, 36); }
     renderBoardRows();
   }
-  if (kind === 'title') {
+  if (kind === 'pick') { // offer the level practised last time
     const sel = overlay.querySelector('#start-level');
-    if (sel) {
-      const reached = reachedLevel();
-      sel.value = String(Math.min(reached, Math.max(1, parseInt(lsGet(START_KEY, 1), 10) || 1)));
-    }
+    sel.value = String(Math.min(reachedLevel(), Math.max(2, parseInt(lsGet(START_KEY, 2), 10) || 2)));
+    try { sel.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+    return;
   }
-  if (kind === 'gameover' || kind === 'ending') {
-    const input = overlay.querySelector('#player-name');
+  const input = overlay.querySelector('#player-name');
+  if (input) {
     input.value = cleanName(lsGet(NAME_KEY, ''));
     try { input.focus({ preventScroll: true }); input.select(); } catch (e) { /* ignore */ }
     return;
   }
   const b = overlay.querySelector('.btn-row button') || overlay.querySelector('button');
   if (b) { try { b.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+}
+// Arcade rule: a name is only asked for when the score earns a place on its Top 10.
+function madeTop10() {
+  const top = topList(boardOf(G.easy));
+  return G.score > 0 && (top.length < 10 || G.score > top[top.length - 1].score);
+}
+function endOfGame(kind) {
+  if (G.practice) { G.saved = true; showOverlay('board', { practice: true }); return; }
+  if (!madeTop10()) { G.saved = true; boardView = null; }
+  showOverlay(kind);
 }
 function hideOverlay() { overlay.hidden = true; overlay.dataset.kind = ''; }
 function setRankLine() { // the player's own name comes from input, so set it as text rather than markup
@@ -2857,9 +2863,10 @@ overlay.addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b) return;
   if (b.dataset.action === 'start') newGame();
-  if (b.dataset.action === 'title') {
+  if (b.dataset.action === 'practice-start') newGame(parseInt(overlay.querySelector('#start-level').value, 10) || 1);
+  if (b.dataset.action === 'title' || b.dataset.action === 'practice-pick') {
     G.practice = false; G.score = 0; G.lives = 5; G.level = 1;
-    fillDots(); resetPositions(); setState('title'); showOverlay('title');
+    fillDots(); resetPositions(); setState('title'); showOverlay(b.dataset.action === 'title' ? 'title' : 'pick');
   }
   if (b.dataset.action === 'resume') resume();
   if (b.dataset.action === 'board') openBoard();
@@ -2867,7 +2874,7 @@ overlay.addEventListener('click', e => {
   if (b.dataset.action === 'close-board') showOverlay(prevKind || (G.paused ? 'paused' : 'title'));
 });
 const canPause = () => ['ready', 'play', 'dying', 'clear'].includes(G.state);
-const canStart = () => G.state === 'title' || ((G.state === 'gameover' || G.state === 'ending') && G.saved);
+const canStart = () => overlay.dataset.kind !== 'pick' && (G.state === 'title' || ((G.state === 'gameover' || G.state === 'ending') && G.saved));
 function pause() { if (!canPause() || G.paused) return; G.paused = true; showOverlay('paused'); }
 function resume() { if (!G.paused) return; G.paused = false; hideOverlay(); audio(); canvas.focus && canvas.blur(); }
 const infoDlg = document.getElementById('info');
@@ -2970,6 +2977,7 @@ window.addEventListener('keydown', e => {
     else if (G.paused && overlay.dataset.kind === 'paused') resume();
   } else if (e.code === 'KeyP' || e.code === 'Escape') {
     if (overlay.dataset.kind === 'board' && G.paused) { showOverlay('paused'); return; }
+    if (overlay.dataset.kind === 'pick') { showOverlay('title'); return; }
     if (G.paused) resume(); else pause();
   } else if (e.code === 'KeyI') {
     openInfo();

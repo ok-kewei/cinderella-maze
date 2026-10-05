@@ -29,24 +29,7 @@ A free, fast-paced arcade maze chase through the royal palace, inspired by a cla
 - **Tooling:** Node.js runs the helper scripts (check, build, smoke test) and the API's unit tests (`node --test`). Players don't need it.
 - **Design & prototyping:** built with Claude, using claude.ai artifacts for previews.
 
-```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 500, "nodeSpacing": 14, "rankSpacing": 20, "padding": 8, "subGraphTitleMargin": {"top": 6, "bottom": 10}}}}%%
-flowchart TD
-  subgraph GH["GitHub"]
-    A["✏️ Change the game on a branch"] --> B["🔀 Pull request: the Check workflow tests it"]
-    B --> C["✅ Merge into main"]
-    C --> D["🚀 Deploy workflow builds the page"]
-  end
-  subgraph AWS["AWS"]
-    E["🔑 AWS checks the token and lends a temporary key"] --> L["⚙️ Lambda gets the Top 10 code"]
-    L --> F["🗄️ S3 stores the game privately"]
-    F --> G["🌍 CloudFront serves it over HTTPS"]
-  end
-  D -- "🤝 OIDC handshake" ---> E
-  G --> H["🎮 Players"]
-```
-
-### How a score reaches the Top 10
+### 🏆 Shared Top 10: how scores are checked and stored
 
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 500, "nodeSpacing": 14, "rankSpacing": 20, "padding": 8}}}%%
@@ -100,12 +83,29 @@ You need [Node.js](https://nodejs.org) (version 18 or later).
 - **API reachable only through CloudFront:** CloudFront adds a secret header that the API checks, so requests sent straight to API Gateway are refused.
 - **Least privilege:** the Top 10 function can only read and write its own table and logs.
 - **Player privacy:** visitor addresses are used only for rate limits, and stored only as salted hashes that expire within hours.
-- **Abuse protection:** checked scores and names, an overall rate limit, per-player limits, and a DynamoDB throughput ceiling (see [How a score reaches the Top 10](#how-a-score-reaches-the-top-10)).
+- **Abuse protection:** checked scores and names, an overall rate limit, per-player limits, and a DynamoDB throughput ceiling (see [Shared Top 10](#-shared-top-10-how-scores-are-checked-and-stored)).
 - **Alerts:** CloudWatch alarms email the owner on errors, traffic spikes or cheating attempts, and a budget alert emails on cost.
 
 ## 📦 CI/CD & Deployment Guide
 
 The game deploys to AWS automatically whenever a change is merged into the `main` branch.
+
+```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 500, "nodeSpacing": 14, "rankSpacing": 20, "padding": 8, "subGraphTitleMargin": {"top": 6, "bottom": 10}}}}%%
+flowchart TD
+  subgraph GH["GitHub"]
+    A["✏️ Change the game on a branch"] --> B["🔀 Pull request: the Check workflow tests it"]
+    B --> C["✅ Merge into main"]
+    C --> D["🚀 Deploy workflow tests and builds the game"]
+  end
+  subgraph AWS["AWS"]
+    E["🔑 AWS checks the token and lends a temporary key"] --> L["⚙️ Lambda gets the Top 10 code"]
+    E --> F["🗄️ S3 stores the game privately"]
+    F --> G["🌍 CloudFront serves it over HTTPS"]
+  end
+  D -- "🤝 OIDC handshake" ---> E
+  G --> H["🎮 Players"]
+```
 
 ### Workflows
 
