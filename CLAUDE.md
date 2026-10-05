@@ -4,7 +4,7 @@ A free arcade maze chase game with a Cinderella story: 20 levels, story surprise
 
 ## How it's built
 
-- **The whole game is one file:** `cinderella-maze.html` (HTML, CSS and one inline `<script>` IIFE; no build tools, no dependencies). Everything is drawn on a `<canvas>`; there are no image files.
+- **The whole game is one file:** `cinderella-maze.html` (HTML, CSS and one inline `<script>` IIFE; no build tools, no dependencies). Everything is drawn on a `<canvas>`; the only image is the start screen's gameplay clip, `assets/preview.webp` (the same recording as `docs/gameplay.gif`, at 640 px as an animated WebP for sharpness). `build.mjs` copies `assets/` into `dist/`, `check.mjs` fails if a file the page loads is missing, and claude.ai publishes need `files: {"assets/preview.webp": "assets/preview.webp"}`.
 - It has **no `<!doctype>`/`<head>`/`<body>`** on purpose: claude.ai artifacts wrap pages automatically. `scripts/build.mjs` adds the wrapper (including `[hidden]{display:none!important}`, which the overlay relies on) when building `dist/index.html` for AWS.
 - **Shared Top 10 (public site):** the page calls `/api` on its own site. CloudFront → API Gateway HTTP API → Lambda (`api/`, Node.js, no bundled dependencies) → one DynamoDB table holding both boards. On claude.ai the page uses the artifact's `db` instead; opened from a file, it keeps scores on the device only.
   - `api/rules.mjs` holds the name rules and believable-score limits; keep `FRUIT_PTS`/`END_BONUS` there in step with the game if scoring changes.
