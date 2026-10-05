@@ -154,6 +154,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   text-wrap: balance;
 }
 .card p { margin: 0; font-size: 20px; font-weight: 600; }
+.card .preview { display: block; width: auto; height: min(240px, 30vh); aspect-ratio: 240 / 308; border-radius: 8px; border: 1px solid rgba(201, 212, 255, .35); box-shadow: 0 6px 24px rgba(0, 0, 0, .45); } /* the gameplay clip on the start screen */
 .card .score-line { font-family: var(--f-arcade); font-size: 14px; letter-spacing: .06em; color: var(--rose); }
 .btn {
   font-family: var(--f-arcade);
@@ -2802,6 +2803,7 @@ function showOverlay(kind, opts) {
   if (kind === 'title') {
     html = `<div class="card">
       <h2>Ready for the ball?</h2>
+      <img class="preview" src="assets/preview.gif" width="240" height="308" alt="A few seconds of play: Cinderella gathers pearls and chases the stepfamily, now mice, past the palace fountain" onerror="this.hidden = true">
       <button class="btn" data-action="start" type="button">Start the night</button>
       ${reachedLevel() > 1 ? '<button class="link-btn" data-action="practice-pick" type="button">Practice a level</button>' : ''}
       </div>`;

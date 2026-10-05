@@ -1,6 +1,6 @@
 // Checks the game before it can be merged or deployed: every inline <script> must be valid JavaScript,
 // and the page must keep the elements its script depends on.
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,6 +21,10 @@ scripts.forEach((code, i) => {
 
 for (const id of ['game', 'overlay', 'screen', 'game-col', 'info', 'mute', 'title-slipper', 'info-trigger']) {
   if (!html.includes(`id="${id}"`)) { console.error(`${file}: missing element #${id}`); failed = true; }
+}
+
+for (const [, path] of html.matchAll(/src="(assets\/[^"]+)"/g)) { // every file the page loads must exist
+  if (!existsSync(path)) { console.error(`${file}: missing ${path}`); failed = true; }
 }
 
 if (failed) process.exit(1);
