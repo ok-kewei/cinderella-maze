@@ -6,7 +6,7 @@
 
 ### ▶ [Play the game](https://djupknnfwqky.cloudfront.net)
 
-[![Ten seconds of level 17: the Grand Duke walks the halls, the midnight clock turns the pearls gold, the sisters' music lesson, the Fairy Godmother's spell, and Cinderella chasing the stepfamily as mice](docs/gameplay.gif)](https://djupknnfwqky.cloudfront.net)
+[![Eight seconds of level 17: the palace fountain, the Grand Duke's royal order, the midnight clock turning the pearls gold, the sisters' music lesson, and Cinderella chasing the stepfamily as mice](docs/gameplay.gif)](https://djupknnfwqky.cloudfront.net)
 
 ## 📖 Game Overview
 
