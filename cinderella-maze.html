@@ -434,10 +434,10 @@ h1 .title-slipper {
 // ---------- Board ----------
 const MAZE = [
   "############################",
-  "#............##............#",
-  "#.####.#####.##.#####.####.#",
-  "#o####.#####.##.#####.####o#",
-  "#.####.#####.##.#####.####.#",
+  "#..........................#",
+  "#.####.##############.####.#",
+  "#o####.##############.####o#",
+  "#.####.##############.####.#",
   "#..........................#",
   "#.####.##.########.##.####.#",
   "#.####.##.########.##.####.#",
@@ -1098,11 +1098,75 @@ function starsTexture(k) { // tiny stars sprinkled over the walls
   for (let i = 0; i < 900; i++) { const px_ = rnd() * W, py_ = rnd() * H, big = rnd() < 0.08; k.fillStyle = big ? '#f7e3a0' : `rgba(255,255,255,${0.35 + rnd() * 0.5})`; k.fillRect(px_, py_, big ? 1.6 : 1, big ? 1.6 : 1); }
   for (let i = 0; i < 40; i++) { const px_ = rnd() * W, py_ = rnd() * H; k.fillStyle = 'rgba(255,245,210,.8)'; k.fillRect(px_ - 2, py_ - 0.4, 4, 0.8); k.fillRect(px_ - 0.4, py_ - 2, 0.8, 4); }
 }
+// The fountain pond: the wide wall block at the top is drawn as a soft rounded pond (it still blocks
+// the way). Its basins are part of the cached maze picture; the water moves every frame.
+const POND = { r0: 2, c0: 7, h: 3, w: 14 };
+const isPond = (c, r) => r >= POND.r0 && r < POND.r0 + POND.h && c >= POND.c0 && c < POND.c0 + POND.w;
+const FOUNTAINS = []; // where the moving water is drawn
+function drawPond(k, edge, glow) {
+  let seed = 3;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const inset = T * 0.3, x = POND.c0 * T + inset, y = (POND.r0 + TOP) * T + inset, w = POND.w * T - 2 * inset, h = POND.h * T - 2 * inset;
+  const shape = (d = 0) => { k.beginPath(); if (k.roundRect) k.roundRect(x + d, y + d, w - 2 * d, h - 2 * d, h / 2 - d); else k.rect(x + d, y + d, w - 2 * d, h - 2 * d); };
+  k.save(); k.shadowColor = glow; k.shadowBlur = 10; k.fillStyle = edge; shape(); k.fill(); k.restore(); // glowing rim, like the walls
+  const g = k.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, '#1c2d63'); g.addColorStop(1, '#2e4f92');
+  k.fillStyle = g; shape(2); k.fill();
+  k.save(); shape(2); k.clip();
+  for (let i = 0; i < w * h / 45; i++) { k.fillStyle = `rgba(255,255,255,${0.25 + rnd() * 0.5})`; k.fillRect(x + rnd() * w, y + rnd() * h, 1, 1); } // stars in the water
+  k.strokeStyle = 'rgba(200,220,255,.28)'; k.lineWidth = 1;
+  for (let i = 0; i < w / 22; i++) { const rx = x + 8 + rnd() * (w - 16), ry = y + 6 + rnd() * (h - 12); k.beginPath(); k.moveTo(rx - 4, ry); k.quadraticCurveTo(rx, ry - 2, rx + 4, ry); k.stroke(); } // ripples
+  k.restore();
+  FOUNTAINS.length = 0;
+  const fx = x + w / 2, fy = y + h / 2 + 3;
+  k.save(); k.translate(fx, fy); k.scale(1.35, 1.35); k.translate(-fx, -fy); // the big fountain's stone basins
+  k.fillStyle = 'rgba(0,0,0,.25)'; k.beginPath(); k.ellipse(fx + 1, fy + 3, 25, 11, 0, 0, Math.PI * 2); k.fill();
+  k.fillStyle = '#b9b3cc'; k.beginPath(); k.ellipse(fx, fy + 1, 24, 10, 0, 0, Math.PI * 2); k.fill();
+  k.fillStyle = '#3a5ea8'; k.beginPath(); k.ellipse(fx, fy + 1, 21, 8, 0, 0, Math.PI * 2); k.fill();
+  k.fillStyle = '#d6d0e4'; k.fillRect(fx - 2.5, fy - 9, 5, 10);
+  k.fillStyle = '#c9c3d8'; k.beginPath(); k.ellipse(fx, fy - 9, 10, 4, 0, 0, Math.PI * 2); k.fill();
+  k.fillStyle = '#4a72bd'; k.beginPath(); k.ellipse(fx, fy - 9.5, 8, 2.8, 0, 0, Math.PI * 2); k.fill();
+  k.restore();
+  FOUNTAINS.push({ x: fx, y: fy, big: true });
+  for (const sx of [x + w * 0.2, x + w * 0.8]) { // a small jet on each side
+    k.fillStyle = '#c9c3d8'; k.beginPath(); k.ellipse(sx, fy + 2, 4, 2, 0, 0, Math.PI * 2); k.fill();
+    FOUNTAINS.push({ x: sx, y: fy + 2, big: false });
+  }
+}
+// Moving fountain water: jets, droplets, water spilling from the upper bowl, ripples and sparkles.
+function drawFountainWater(c, t) {
+  for (const f of FOUNTAINS) {
+    c.save();
+    if (!f.big) {
+      const tp = f.y - 13 - Math.sin(t * 7 + f.x) * 1.5;
+      c.strokeStyle = 'rgba(225,242,255,.8)'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(f.x, f.y); c.lineTo(f.x, tp); c.stroke();
+      for (let i = 0; i < 6; i++) { const p = (t * 1.1 + i / 6) % 1, sd = i % 2 ? 1 : -1; c.fillStyle = `rgba(230,244,255,${0.9 - p * 0.6})`; c.beginPath(); c.arc(f.x + sd * 5 * p, tp + (f.y - tp) * p * p, 0.9, 0, Math.PI * 2); c.fill(); }
+      const rp = (t * 0.8 + f.x) % 1; c.strokeStyle = 'rgba(200,225,255,.5)'; c.lineWidth = 0.8; c.globalAlpha = 1 - rp; c.beginPath(); c.ellipse(f.x, f.y, 3 + rp * 8, 1.5 + rp * 3, 0, 0, Math.PI * 2); c.stroke();
+      c.restore(); continue;
+    }
+    c.translate(f.x, f.y); c.scale(1.35, 1.35); c.translate(-f.x, -f.y);
+    const top = f.y - 22 - Math.sin(t * 9) * 1.5;
+    const jet = c.createLinearGradient(0, top, 0, f.y - 10); jet.addColorStop(0, 'rgba(255,255,255,.95)'); jet.addColorStop(1, 'rgba(190,220,255,.5)');
+    c.fillStyle = jet; c.beginPath(); c.moveTo(f.x - 1.2, f.y - 10); c.quadraticCurveTo(f.x, top - 2, f.x + 1.2, f.y - 10); c.fill();
+    for (let i = 0; i < 10; i++) { // droplets falling from the jet into the upper bowl
+      const p = (t * 0.9 + i / 10) % 1, side = i % 2 ? 1 : -1, spread = 3 + (i % 5) * 1.6;
+      c.fillStyle = `rgba(230,244,255,${0.9 - p * 0.5})`; c.beginPath(); c.arc(f.x + side * spread * p, top + (f.y - 10 - top) * p * p - 12 * p * (1 - p), 1.1, 0, Math.PI * 2); c.fill();
+    }
+    for (let i = 0; i < 14; i++) { // water spilling over the upper bowl into the lower basin
+      const p = (t * 0.75 + i / 14) % 1, a = (i / 14) * Math.PI * 2;
+      c.fillStyle = `rgba(210,232,255,${0.85 - p * 0.6})`; c.beginPath(); c.arc(f.x + Math.cos(a) * (9 + 8 * p), f.y - 9 + Math.sin(a) * (3.5 + 3 * p) + 9 * p * p, 1, 0, Math.PI * 2); c.fill();
+    }
+    c.strokeStyle = 'rgba(200,225,255,.6)'; c.lineWidth = 1;
+    for (let i = 0; i < 3; i++) { const p = (t * 0.5 + i / 3) % 1; c.globalAlpha = 1 - p; c.beginPath(); c.ellipse(f.x, f.y + 1, 9 + p * 11, 3.5 + p * 4.5, 0, 0, Math.PI * 2); c.stroke(); } // ripples
+    c.globalAlpha = 1;
+    for (let i = 0; i < 4; i++) { const tw = (Math.sin(t * 4 + i * 1.7) + 1) / 2; c.fillStyle = `rgba(255,255,255,${tw})`; c.beginPath(); c.arc(f.x + [-14, 12, -6, 16][i], f.y + [0, 3, 5, -1][i], 0.9, 0, Math.PI * 2); c.fill(); } // sparkles
+    c.restore();
+  }
+}
 function buildMaze(edge, fill, glow, texture) {
   const mk = () => { const o = document.createElement('canvas'); o.width = Math.round(W * RS); o.height = Math.round(H * RS); const k = o.getContext('2d'); k.scale(RS, RS); return [o, k]; };
   const [edgeC, ek] = mk();
   ek.fillStyle = edge;
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (grid[r][c] === '#') { cellPath(ek, c, r, T * 0.3, 4); ek.fill(); }
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (grid[r][c] === '#' && !isPond(c, r)) { cellPath(ek, c, r, T * 0.3, 4); ek.fill(); }
   const [out, k] = mk();
   drawSofaRoom(k);
   k.shadowColor = glow; k.shadowBlur = 10;
@@ -1110,9 +1174,10 @@ function buildMaze(edge, fill, glow, texture) {
   k.shadowBlur = 0;
   const [fillC, fk] = mk();
   fk.fillStyle = fill;
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (grid[r][c] === '#') { cellPath(fk, c, r, T * 0.3 + 2, 2); fk.fill(); }
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (grid[r][c] === '#' && !isPond(c, r)) { cellPath(fk, c, r, T * 0.3 + 2, 2); fk.fill(); }
   if (texture) { fk.globalCompositeOperation = 'source-atop'; texture(fk); }
   k.drawImage(fillC, 0, 0, W, H);
+  drawPond(k, edge, glow);
   k.fillStyle = C.rose;
   k.fillRect(13 * T - 2, (12 + TOP) * T + T * 0.42, 2 * T + 4, T * 0.16);
   return out;
@@ -2375,6 +2440,7 @@ function render() {
   ctx.fillStyle = C.night; ctx.fillRect(0, 0, W, H);
   const flash = G.state === 'clear' && G.stateTime > 0.5 && Math.floor(G.stateTime * 5) % 2 === 0;
   ctx.drawImage(flash ? mazeFlash : mazeImg, 0, 0, W, H);
+  drawFountainWater(ctx, anim);
 
   // sparkles
   const sprite = G.rushT > 0 ? goldPearl : pearl;
@@ -3060,7 +3126,7 @@ function start(data) {
   if (data && Array.isArray(data.dots) && data.dots.length === dots.length && ['ready', 'play', 'dying', 'clear'].includes(data.state)) {
     Object.assign(G, { score: data.score | 0, lives: Math.max(1, data.lives | 0), level: Math.max(1, data.level | 0), nextLife: Math.max(10000, +data.nextLife || (Math.floor((data.score | 0) / 10000) + 1) * 10000) });
     dots.set(data.dots); G.dotsLeft = data.dots.filter(Boolean).length;
-    G.dotsEaten = 244 - G.dotsLeft;
+    G.dotsEaten = MAZE.join('').replace(/[^.o]/g, '').length - G.dotsLeft; // pearls in the maze minus those left
     setState('ready', 1.6);
     hideOverlay(); pause();
   } else {
