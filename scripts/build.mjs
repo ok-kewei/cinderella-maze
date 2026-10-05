@@ -1,6 +1,6 @@
 // Builds the deployable site: wraps the game page in a complete HTML document and writes dist/index.html.
 // (On claude.ai the page is wrapped automatically; a normal web host needs the full document.)
-import { readFileSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, cpSync, rmSync } from 'node:fs';
 
 const game = readFileSync('cinderella-maze.html', 'utf8');
 
@@ -25,5 +25,6 @@ ${game}
 
 mkdirSync('dist', { recursive: true });
 writeFileSync('dist/index.html', page);
+rmSync('dist/assets', { recursive: true, force: true }); // start clean, so removed files don't linger
 cpSync('assets', 'dist/assets', { recursive: true }); // files the page loads, like the start screen's gameplay clip
 console.log(`Built dist/index.html (${(page.length / 1024).toFixed(1)} KB) and copied assets/`);

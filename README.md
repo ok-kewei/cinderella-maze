@@ -20,7 +20,7 @@ A free, fast-paced arcade maze chase through the royal palace, inspired by a cla
 
 ## 🛠️ Tech Stack & Architecture
 
-- **Game:** HTML5 Canvas and plain JavaScript in a single page (`cinderella-maze.html`), with no framework. Everything in the game is drawn in code; the only image is the short gameplay clip on the start screen (`assets/preview.gif`). Music and sound effects are generated with the Web Audio API.
+- **Game:** HTML5 Canvas and plain JavaScript in a single page (`cinderella-maze.html`), with no framework. Everything in the game is drawn in code; the only image is the short gameplay clip on the start screen (`assets/preview.webp`). Music and sound effects are generated with the Web Audio API.
 - **Hosting & delivery:** AWS S3 (private storage) behind AWS CloudFront (CDN, HTTPS).
 - **Shared Top 10:** CloudFront sends `/api` requests to an API Gateway HTTP API, which runs a Node.js AWS Lambda function (`api/`). Scores are stored in Amazon DynamoDB, with one table holding both lists (normal and easy).
 - **Monitoring:** CloudWatch logs and alarms, emailed through SNS.
