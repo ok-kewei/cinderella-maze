@@ -229,6 +229,11 @@ table.board tr.me td:last-child { border-radius: 0 6px 6px 0; }
 .guest-list table.board tr.gap td { color: #8a6a2a; }
 .guest-list .form-note { color: #6b5a45; }
 .done-chip { background: #f2cf73 !important; }
+.saving-chip { margin-left: 6px; font-size: 13px; font-style: italic; opacity: 0.7; }
+.board-tabs { display: flex; gap: 0; border: 1px solid rgba(138, 106, 42, 0.45); border-radius: 999px; overflow: hidden; }
+.board-tabs button { font: inherit; font-family: var(--f-arcade); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; padding: 5px 14px; border: 0; background: transparent; color: #8a6a2a; cursor: pointer; }
+.board-tabs button[aria-pressed="true"] { background: #6b2a55; color: #fbeedd; }
+.board-tabs button:focus-visible { outline: 2px solid #6b2a55; outline-offset: -3px; }
 .easy-chip { margin-left: 6px; padding: 0 6px; border-radius: 999px; font-family: var(--f-arcade); font-size: 9px; letter-spacing: .06em; color: #3a1a2a; background: #f5c3d6; vertical-align: 2px; }
 .guest-list .btn.secondary { color: #3a2a1a; border-color: rgba(58, 42, 26, 0.35); }
 table.board tr.gap td { text-align: center; color: var(--muted); border-bottom: 0; padding: 2px; }
@@ -1418,6 +1423,7 @@ function unlockAll() { // testing shortcut: every level becomes available
 }
 function startLevel() {
   markReached();
+  if (G.level === G.startLevel + 1) startSession(); // no session yet (offline when the game began)? try again once
   music.step = 0;
   fillDots(); G.dotsEaten = 0; resetPositions(); setState('ready', 3.2); SFX.start();
 }
@@ -1431,6 +1437,7 @@ function newGame() {
   const easyBox = document.getElementById('easy-mode');
   if (easyBox) { G.easy = easyBox.checked; lsSet(EASY_KEY, G.easy); }
   G.score = 0; G.lives = 5; G.level = G.startLevel; G.saved = false; G.completed = false; G.nextLife = 10000; G.wand = 1; G.popups = []; G.particles = [];
+  G.gameNo = (G.gameNo || 0) + 1; G.session = null; startSession(); flushPending();
   G.paused = false; hideOverlay();
   fillDots(); G.dotsEaten = 0; resetPositions(); setState('ready', 3.2); SFX.start();
 }
@@ -2524,33 +2531,120 @@ function render() {
 }
 
 // ---------- High score board ----------
-// Shared across everyone who plays when the page's store is available; otherwise kept on this device.
+// Two lists, normal and easy. On claude.ai they live in the page's shared store; on the public site
+// in the Top 10 API (/api on the same site); anywhere else (a file opened from disk) on this device only.
 const LOCAL_SCORES = 'cinderella-maze-scores', NAME_KEY = 'cinderella-maze-name';
-let DB = null, sharedTop = null, boardView = null, prevKind = '';
+const BOARD_CACHE = 'cinderella-maze-board', PENDING_KEY = 'cinderella-maze-pending';
+const USE_API = !window.claude && /^https?:$/.test(location.protocol);
+let DB = null, boards = { normal: null, easy: null }, boardTab = 'normal', boardView = null, prevKind = '';
+const freshUntil = { normal: 0, easy: 0 }; // a list that came back with a saved score beats briefly cached ones
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } };
 const cleanName = n => String(n || '').replace(/\s+/g, ' ').trim().slice(0, 12);
+const boardOf = easy => easy ? 'easy' : 'normal';
 function localScores() { const l = lsGet(LOCAL_SCORES, []); return Array.isArray(l) ? l : []; }
-function topList() {
-  if (sharedTop) return sharedTop;
-  return localScores().slice().sort((a, b) => b.score - a.score).slice(0, 10);
+function topList(board) {
+  if (boards[board]) return boards[board];
+  return localScores().filter(e => boardOf(e.easy) === board).sort((a, b) => b.score - a.score).slice(0, 10);
 }
-function bumpHigh() { const t = topList()[0]; if (t && t.score > high) high = t.score; }
+function bumpHigh() { const t = topList(boardOf(G.easy))[0]; if (t && t.score > high) high = t.score; }
+const tidyEntry = (v, id, board) => ({ id: String(id), name: cleanName(v.name) || 'Guest', score: Number(v.score) || 0, level: Number(v.level) || 1, easy: board === 'easy', done: v.done === true });
+function setBoard(board, list) {
+  boards[board] = list.map(v => tidyEntry(v, v.id, board));
+  if (USE_API) lsSet(BOARD_CACHE, boards); // shown straight away next time, even offline
+  bumpHigh();
+  if (overlay.dataset.kind === 'board') renderBoardRows();
+}
 
 async function connectBoard() {
+  if (USE_API) {
+    const cached = lsGet(BOARD_CACHE, null);
+    for (const b of ['normal', 'easy']) if (cached && Array.isArray(cached[b])) setBoard(b, cached[b]);
+    loadBoard('normal'); loadBoard('easy');
+    flushPending();
+    window.addEventListener('online', flushPending); // back online: send any score still waiting
+    return;
+  }
   try {
     DB = window.claude && window.claude.use ? await window.claude.use('db') : null;
   } catch (e) { DB = null; }
   if (!DB) return;
-  const q = DB.collection('scores').orderBy('score', 'desc').limit(10);
+  const q = DB.collection('scores').orderBy('score', 'desc').limit(60);
   q.onSnapshot(snap => {
-    sharedTop = snap.docs.map(d => {
-      const v = d.data() || {};
-      return { id: d.id, name: cleanName(v.name) || 'Guest', score: Number(v.score) || 0, level: Number(v.level) || 1, easy: v.easy === true, done: v.done === true };
-    });
-    bumpHigh();
-    if (overlay.dataset.kind === 'board') renderBoardRows();
+    const all = snap.docs.map(d => { const v = d.data() || {}; return tidyEntry(v, d.id, boardOf(v.easy === true)); });
+    for (const b of ['normal', 'easy']) setBoard(b, all.filter(e => boardOf(e.easy) === b).slice(0, 10));
   }, () => { /* keep whatever the board last showed */ });
+}
+
+// ----- The Top 10 API -----
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Network hiccups, server errors and "too busy" get quick retries with growing waits (about 0.5, 1.5 and
+// 4.5 seconds, a little random so players don't all retry together). Other refusals are final.
+async function api(path, body, tries = 3) {
+  for (let i = 0; ; i++) {
+    try {
+      const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+      const timer = ctl && setTimeout(() => ctl.abort(), 8000);
+      const res = await fetch('/api/' + path, Object.assign({ signal: ctl && ctl.signal },
+        body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}));
+      clearTimeout(timer);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) return { ok: true, data };
+      if (res.status < 500 && res.status !== 429) return { ok: false, final: true, status: res.status, data };
+    } catch (e) { /* offline, or the connection dropped */ }
+    if (i + 1 >= tries) return { ok: false, final: false };
+    await sleep(500 * 3 ** i * (0.75 + Math.random() * 0.5));
+  }
+}
+async function loadBoard(board) {
+  const r = await api('scores?board=' + board, null, 2);
+  if (r.ok && r.data && Array.isArray(r.data.top) && Date.now() > freshUntil[board]) setBoard(board, r.data.top);
+}
+// Each game asks the API for a session as it starts, so the API knows how long the game really took.
+async function startSession() {
+  if (!USE_API || G.practice || G.session) return;
+  const game = G.gameNo;
+  const r = await api('session', { easy: !!G.easy });
+  if (r.ok && game === G.gameNo && r.data && typeof r.data.session === 'string') G.session = r.data.session;
+}
+
+// Scores that couldn't be sent yet wait on this device and are sent when the page opens or goes online.
+const pendingList = () => { const l = lsGet(PENDING_KEY, []); return Array.isArray(l) ? l : []; };
+let flushing = false;
+async function flushPending() {
+  if (!USE_API || flushing) return;
+  flushing = true;
+  try {
+    for (const p of pendingList()) {
+      const r = await api('scores', p.body);
+      if (!r.ok && !r.final) break; // still out of reach: try again later
+      lsSet(PENDING_KEY, pendingList().filter(x => x.body.session !== p.body.session));
+      if (r.ok) scoreSaved(p.body.session, r.data);
+    }
+  } finally { flushing = false; }
+}
+function savedBoard(data) {
+  if (!data || !Array.isArray(data.top) || !(data.board in boards)) return;
+  freshUntil[data.board] = Date.now() + 15000;
+  setBoard(data.board, data.top);
+}
+function scoreSaved(session, data) {
+  savedBoard(data);
+  const me = boardView && boardView.mine;
+  if (me && me.session === session) {
+    Object.assign(me, { id: String(data.id), rank: data.rank, saving: false });
+    if (overlay.dataset.kind === 'board') { setRankLine(); renderBoardRows(); }
+  }
+}
+
+function saveLocal(entry) {
+  const list = localScores();
+  const id = 'local-' + Date.now();
+  list.push(Object.assign({ id }, entry));
+  list.sort((a, b) => b.score - a.score);
+  const rank = list.filter(e => boardOf(e.easy) === boardOf(entry.easy)).findIndex(x => x.id === id) + 1;
+  lsSet(LOCAL_SCORES, list.slice(0, 100));
+  return { id, rank };
 }
 
 async function saveScore(name, score, level) {
@@ -2560,29 +2654,41 @@ async function saveScore(name, score, level) {
       try {
         const ref = await DB.collection('scores').add(entry);
         let rank = null;
-        try { const above = await DB.collection('scores').where('score', '>', score).limit(1000).get(); rank = above.size + 1; } catch (e) { rank = null; }
-        return { id: ref.id, rank, shared: true };
+        try { const above = await DB.collection('scores').where('score', '>', score).limit(1000).get(); rank = above.docs.filter(d => (d.data() || {}).easy === entry.easy).length + 1; } catch (e) { rank = null; }
+        return { id: ref.id, rank };
       } catch (e) {
-        if (e && e.code === 'unavailable' && attempt === 0) { await new Promise(r => setTimeout(r, 400 + Math.random() * 600)); continue; }
+        if (e && e.code === 'unavailable' && attempt === 0) { await sleep(400 + Math.random() * 600); continue; }
         break; // fall back to this device
       }
     }
   }
-  const list = localScores();
-  const id = 'local-' + Date.now();
-  list.push(Object.assign({ id }, entry));
-  list.sort((a, b) => b.score - a.score);
-  const rank = list.findIndex(x => x.id === id) + 1;
-  lsSet(LOCAL_SCORES, list.slice(0, 100));
-  return { id, rank, shared: false };
+  if (USE_API && G.session) {
+    const body = { session: G.session, name, score, level, done: !!G.completed };
+    const r = await api('scores', body);
+    if (r.ok) { savedBoard(r.data); return { id: String(r.data.id), rank: r.data.rank }; }
+    if (r.final && r.data && r.data.error === 'name') return { nameRefused: true };
+    if (!r.final) { // out of reach for now: show it on the list as "saving…" and send it later
+      lsSet(PENDING_KEY, pendingList().concat({ body }).slice(-20));
+      const top = topList(boardOf(entry.easy));
+      return { id: 'pending-' + G.session, rank: top.filter(e => e.score > score).length + 1, saving: true, session: G.session };
+    }
+    // refused as unbelievable: it stays on this device only
+  }
+  return saveLocal(entry);
 }
 
 function renderBoardRows() {
   const body = overlay.querySelector('#board-body');
   if (!body) return;
-  const top = topList();
   const me = boardView && boardView.mine;
+  const mineHere = !!me && boardOf(me.easy) === boardTab;
+  let top = topList(boardTab);
+  if (mineHere && me.saving && !top.some(e => e.id === me.id)) top = top.concat(me).sort((a, b) => b.score - a.score).slice(0, 10);
+  for (const b of overlay.querySelectorAll('[data-board]')) b.setAttribute('aria-pressed', String(b.dataset.board === boardTab));
+  const where = overlay.querySelector('#board-where');
+  if (where) where.textContent = boards[boardTab] ? 'Scores from everyone who plays this game.' : 'Scores saved on this device.';
   body.textContent = '';
+  const chip = (td, cls, text) => { const s = document.createElement('span'); s.className = cls; s.textContent = text; td.appendChild(s); };
   const row = (rank, e, isMe) => {
     const tr = document.createElement('tr');
     if (isMe) tr.className = 'me';
@@ -2595,20 +2701,20 @@ function renderBoardRows() {
         if (rank === 1) drawPrize(k, FINAL_LEVEL, 12, 13, 22); else if (rank === 2) { k.fillStyle = 'rgba(90,140,210,.35)'; k.beginPath(); k.arc(12, 12, 11, 0, Math.PI * 2); k.fill(); drawSlipper(k, 12, 14, 19, false); } else drawPrize(k, 1, 12, 13, 21);
         td.appendChild(cv);
       } else td.textContent = text;
-      if (cls === 'name' && e.done) { const chip = document.createElement('span'); chip.className = 'easy-chip done-chip'; chip.textContent = 'finished'; td.appendChild(chip); }
-      if (cls === 'name' && e.easy) { const chip = document.createElement('span'); chip.className = 'easy-chip'; chip.textContent = 'easy'; td.appendChild(chip); }
+      if (cls === 'name' && e.done) chip(td, 'easy-chip done-chip', 'finished');
+      if (cls === 'name' && isMe && me.saving) chip(td, 'saving-chip', 'saving…');
       tr.appendChild(td);
     }
     body.appendChild(tr);
   };
   if (!top.length) {
     const tr = document.createElement('tr'), td = document.createElement('td');
-    td.colSpan = 4; td.textContent = 'No scores yet. Finish a game to be the first.'; td.style.textAlign = 'center';
+    td.colSpan = 4; td.textContent = boardTab === 'easy' ? 'No Easy dancers yet. Be the first!' : 'No scores yet. Finish a game to be the first.'; td.style.textAlign = 'center';
     tr.appendChild(td); body.appendChild(tr);
   }
   let shown = false;
-  top.forEach((e, i) => { const isMe = !!me && e.id === me.id; if (isMe) shown = true; row(i + 1, e, isMe); });
-  if (me && !shown && me.rank && me.rank > 10) {
+  top.forEach((e, i) => { const isMe = mineHere && e.id === me.id; if (isMe) shown = true; row(i + 1, e, isMe); });
+  if (mineHere && !shown && me.rank && me.rank > 10) {
     const gap = document.createElement('tr'); gap.className = 'gap';
     const td = document.createElement('td'); td.colSpan = 4; td.textContent = '···'; gap.appendChild(td); body.appendChild(gap);
     row(me.rank, me, true);
@@ -2675,7 +2781,6 @@ function showOverlay(kind, opts) {
   } else if (kind === 'board') {
     const mine = opts && opts.mine;
     const rankLine = mine && mine.rank ? '<p class="rank-line"></p>' : '';
-    const where = sharedTop ? 'Scores from everyone who plays this game.' : 'Scores saved on this device.';
     const over = (G.state === 'gameover' || G.state === 'ending') && G.saved;
     const buttons = over && G.practice
       ? `<button class="btn" data-action="start" type="button">Practice again</button><button class="btn secondary" data-action="title" type="button">Change level</button>`
@@ -2686,10 +2791,13 @@ function showOverlay(kind, opts) {
       <canvas class="crest" width="44" height="34" aria-hidden="true"></canvas>
       <h2>The Royal Ball</h2>
       <p class="kicker">Top 10 dancers</p>${rankLine}${practiceLine}
+      <div class="board-tabs" role="group" aria-label="Which list">
+        <button type="button" data-action="tab" data-board="normal">Normal</button><button type="button" data-action="tab" data-board="easy">Easy</button>
+      </div>
       <div class="board-wrap"><table class="board">
         <thead><tr><th class="rank">Place</th><th>Name</th><th class="num">Level</th><th class="num">Score</th></tr></thead>
         <tbody id="board-body"></tbody></table></div>
-      <p class="form-note">${where}</p>
+      <p class="form-note" id="board-where"></p>
       <div class="btn-row">${buttons}</div></div>`;
   }
   overlay.innerHTML = html;
@@ -2697,12 +2805,9 @@ function showOverlay(kind, opts) {
   overlay.dataset.kind = kind;
   if (kind === 'board') {
     boardView = { mine: opts && opts.mine };
-    // the player's own name comes from input, so set it as text rather than markup
-    const rl = overlay.querySelector('.rank-line');
-    if (rl && boardView.mine) {
-      const r = boardView.mine.rank;
-      rl.textContent = r === 1 ? `${boardView.mine.name}, you're the belle of the ball!` : `${boardView.mine.name}, you placed #${r} at the ball`;
-    }
+    boardTab = boardOf(boardView.mine ? boardView.mine.easy : G.easy);
+    setRankLine();
+    if (USE_API) loadBoard(boardTab);
     const crest = overlay.querySelector('.crest');
     if (crest) { crest.width = 44 * dpr; crest.height = 34 * dpr; const k = crest.getContext('2d'); k.scale(dpr, dpr); drawPrize(k, FINAL_LEVEL, 22, 18, 36); }
     renderBoardRows();
@@ -2720,10 +2825,15 @@ function showOverlay(kind, opts) {
     try { input.focus({ preventScroll: true }); input.select(); } catch (e) { /* ignore */ }
     return;
   }
-  const b = overlay.querySelector('button');
+  const b = overlay.querySelector('.btn-row button') || overlay.querySelector('button');
   if (b) { try { b.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
 }
 function hideOverlay() { overlay.hidden = true; overlay.dataset.kind = ''; }
+function setRankLine() { // the player's own name comes from input, so set it as text rather than markup
+  const rl = overlay.querySelector('.rank-line'), me = boardView && boardView.mine;
+  if (!rl || !me || !me.rank) return;
+  rl.textContent = me.rank === 1 ? `${me.name}, you're the belle of the ball!` : `${me.name}, you placed #${me.rank} at the ball`;
+}
 
 overlay.addEventListener('submit', async e => {
   if (e.target.id !== 'name-form') return;
@@ -2734,9 +2844,14 @@ overlay.addEventListener('submit', async e => {
   btn.disabled = true; btn.textContent = 'Saving…'; note.textContent = ''; note.className = 'form-note';
   lsSet(NAME_KEY, name);
   const res = await saveScore(name, G.score, G.level);
+  if (res.nameRefused) {
+    btn.disabled = false; btn.textContent = 'Save my score';
+    note.textContent = 'Please choose another name.'; note.className = 'form-note error'; input.focus(); input.select();
+    return;
+  }
   G.saved = true;
   bumpHigh(); saveHigh();
-  showOverlay('board', { mine: { id: res.id, rank: res.rank, name, score: G.score, level: G.level, easy: !!G.easy, done: !!G.completed } });
+  showOverlay('board', { mine: { id: res.id, rank: res.rank, saving: !!res.saving, session: res.session, name, score: G.score, level: G.level, easy: !!G.easy, done: !!G.completed } });
 });
 overlay.addEventListener('click', e => {
   const b = e.target.closest('button');
@@ -2748,6 +2863,7 @@ overlay.addEventListener('click', e => {
   }
   if (b.dataset.action === 'resume') resume();
   if (b.dataset.action === 'board') openBoard();
+  if (b.dataset.action === 'tab') { boardTab = b.dataset.board; renderBoardRows(); if (USE_API) loadBoard(boardTab); }
   if (b.dataset.action === 'close-board') showOverlay(prevKind || (G.paused ? 'paused' : 'title'));
 });
 const canPause = () => ['ready', 'play', 'dying', 'clear'].includes(G.state);

@@ -6,13 +6,18 @@ A free arcade maze chase game with a Cinderella story: 20 levels, story surprise
 
 - **The whole game is one file:** `cinderella-maze.html` (HTML, CSS and one inline `<script>` IIFE; no build tools, no dependencies). Everything is drawn on a `<canvas>`; there are no image files.
 - It has **no `<!doctype>`/`<head>`/`<body>`** on purpose: claude.ai artifacts wrap pages automatically. `scripts/build.mjs` adds the wrapper (including `[hidden]{display:none!important}`, which the overlay relies on) when building `dist/index.html` for AWS.
+- **Shared Top 10 (public site):** the page calls `/api` on its own site. CloudFront → API Gateway HTTP API → Lambda (`api/`, Node.js, no bundled dependencies) → one DynamoDB table holding both boards. On claude.ai the page uses the artifact's `db` instead; opened from a file, it keeps scores on the device only.
+  - `api/rules.mjs` holds the name rules and believable-score limits; keep `FRUIT_PTS`/`END_BONUS` there in step with the game if scoring changes.
+  - The API never answers 403, because CloudFront turns 403s into the game page.
 - `previews/` holds design preview pages. They are kept out of git (`.gitignore`) because some use the old Disney names.
 
 ## Commands
 
 ```bash
 node scripts/check.mjs   # syntax-checks the inline script and required element ids; run after every change
+node --test api/test/*.test.mjs   # unit tests for the Top 10 API
 node scripts/build.mjs   # writes dist/index.html for deployment
+node scripts/smoke.mjs https://djupknnfwqky.cloudfront.net   # checks the live site and API (Deploy runs it)
 ```
 
 ## Workflow
@@ -25,8 +30,9 @@ node scripts/build.mjs   # writes dist/index.html for deployment
 
 - Site: https://djupknnfwqky.cloudfront.net (private S3 bucket behind CloudFront with Origin Access Control; HTTPS only).
 - GitHub deploys through OIDC (no stored keys); the role only trusts `ok-kewei/cinderella-maze` on `main`.
-- GitHub repository variables: `AWS_DEPLOY_ROLE_ARN`, `AWS_REGION`, `SITE_BUCKET`, `CLOUDFRONT_DISTRIBUTION_ID` (values: `aws cloudformation describe-stacks --stack-name cinderella-maze --query "Stacks[0].Outputs"`).
-- A $1/month budget alert emails the owner.
+- GitHub repository variables: `AWS_DEPLOY_ROLE_ARN`, `AWS_REGION`, `SITE_BUCKET`, `CLOUDFRONT_DISTRIBUTION_ID`, `API_FUNCTION_NAME`, `SITE_URL` (values: `aws cloudformation describe-stacks --stack-name cinderella-maze --query "Stacks[0].Outputs"`).
+- A $1/month budget alert emails the owner; CloudWatch alarms (API errors, abuse spikes) email through SNS.
+- The Lambda code is deployed by the Deploy workflow, not CloudFormation (the template only holds a placeholder). The account's Lambda concurrency limit is 10, so the function has no reserved concurrency; API Gateway throttling caps traffic.
 - Infrastructure lives in `infra/site.yaml`; change it there and redeploy the stack rather than editing resources by hand.
 
 ## Decisions to keep

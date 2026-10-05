@@ -1,6 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   Cinderella's Midnight Maze - static website on a private S3 bucket served through CloudFront (HTTPS),
+  a shared Top 10 (CloudFront /api/* -> API Gateway -> Lambda -> DynamoDB) with alarms,
   a GitHub Actions deploy role (OIDC, no stored keys) limited to this site, and a monthly cost alert.
 
 Parameters:
@@ -27,7 +28,7 @@ Parameters:
     Description: Set to false if this AWS account already has the token.actions.githubusercontent.com identity provider.
   BudgetEmail:
     Type: String
-    Description: Email address that receives cost alerts.
+    Description: Email address that receives cost alerts and Top 10 health alerts.
   MonthlyBudgetUsd:
     Type: Number
     Default: 1
@@ -35,6 +36,12 @@ Parameters:
 
 Conditions:
   CreateOidc: !Equals [!Ref CreateGitHubOidcProvider, 'true']
+
+Mappings:
+  Api:
+    Throttle:
+      RatePerSecond: 10 # requests per second for the whole Top 10, across all players
+      Burst: 20
 
 Resources:
   # Private bucket: no public access at all; only CloudFront can read it.
@@ -89,6 +96,16 @@ Resources:
             OriginAccessControlId: !GetAtt OriginAccessControl.Id
             S3OriginConfig:
               OriginAccessIdentity: ''
+          - Id: top10-api
+            DomainName: !Sub '${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+            OriginCustomHeaders:
+              # Proves a request came through CloudFront. The value is this stack's own id, which only
+              # the account can see; the Lambda refuses requests without it.
+              - HeaderName: X-Origin-Verify
+                HeaderValue: !Select [2, !Split ['/', !Ref 'AWS::StackId']]
         DefaultCacheBehavior:
           TargetOriginId: site-bucket
           ViewerProtocolPolicy: redirect-to-https
@@ -97,8 +114,20 @@ Resources:
           Compress: true
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # AWS managed: CachingOptimized
           ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03 # AWS managed: SecurityHeadersPolicy
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: top10-api
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+            CachedMethods: [GET, HEAD]
+            Compress: true
+            CachePolicyId: !Ref ApiCachePolicy
+            OriginRequestPolicyId: !Ref ApiOriginRequestPolicy
+            ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03 # AWS managed: SecurityHeadersPolicy
         CustomErrorResponses:
-          - ErrorCode: 403 # a missing file in a private bucket answers 403; show the game instead
+          # A missing file in a private bucket answers 403; show the game instead.
+          # This applies to /api/* too, so the API never answers 403.
+          - ErrorCode: 403
             ResponseCode: 200
             ResponsePagePath: /index.html
             ErrorCachingMinTTL: 60
@@ -141,7 +170,8 @@ Resources:
         - 6938fd4d98bab03faadb97b34396831e3780aea1
         - 1c58a3a8518e8759bf075b76b750d4f2df264fcd
 
-  # The only thing GitHub may do: upload this site's files and refresh CloudFront, from the deploy branch.
+  # The only things GitHub may do, from the deploy branch: upload this site's files, refresh CloudFront,
+  # and update the Top 10 function's code.
   DeployRole:
     Type: AWS::IAM::Role
     Properties:
@@ -177,6 +207,299 @@ Resources:
               - Effect: Allow
                 Action: cloudfront:CreateInvalidation
                 Resource: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}'
+              - Effect: Allow
+                Action: [lambda:UpdateFunctionCode, lambda:GetFunction, lambda:GetFunctionConfiguration]
+                Resource: !GetAtt ApiFunction.Arn
+
+  # ---------- Shared Top 10 ----------
+
+  # One table for both boards. Items: games in progress (S#), scores (H#) and per-player request
+  # counters (R#); the ByScore index lists each board's scores from highest to lowest.
+  ScoresTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      OnDemandThroughput: # a ceiling on cost if something goes wrong
+        MaxReadRequestUnits: 100
+        MaxWriteRequestUnits: 50
+      AttributeDefinitions:
+        - { AttributeName: pk, AttributeType: S }
+        - { AttributeName: board, AttributeType: S }
+        - { AttributeName: score, AttributeType: N }
+      KeySchema:
+        - { AttributeName: pk, KeyType: HASH }
+      GlobalSecondaryIndexes:
+        - IndexName: ByScore
+          KeySchema:
+            - { AttributeName: board, KeyType: HASH }
+            - { AttributeName: score, KeyType: RANGE }
+          Projection:
+            ProjectionType: INCLUDE
+            NonKeyAttributes: [id, name, level, done]
+          OnDemandThroughput:
+            MaxReadRequestUnits: 100
+            MaxWriteRequestUnits: 50
+      TimeToLiveSpecification: # games and request counters delete themselves
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification: # restore the scores to any second in the last 35 days
+        PointInTimeRecoveryEnabled: true
+      DeletionProtectionEnabled: true
+
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-api'
+      RetentionInDays: 30
+
+  # The function may only read and write the scores table and its own logs.
+  ApiFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Top 10 API for Cinderella's Midnight Maze
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: top10
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:Query, dynamodb:ConditionCheckItem]
+                Resource:
+                  - !GetAtt ScoresTable.Arn
+                  - !Sub '${ScoresTable.Arn}/index/ByScore'
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt ApiLogGroup.Arn
+
+  # The code in api/ is uploaded by the Deploy workflow; this placeholder only exists until the first deploy.
+  # (No reserved concurrency: this account's limit is 10, all of which AWS keeps unreserved.
+  # API Gateway's rate limit caps the traffic instead.)
+  ApiFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: ApiLogGroup
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-api'
+      Description: Top 10 API for Cinderella's Midnight Maze (code in api/)
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      Handler: index.handler
+      MemorySize: 256
+      Timeout: 6
+      Role: !GetAtt ApiFunctionRole.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ScoresTable
+          ORIGIN_SECRET: !Select [2, !Split ['/', !Ref 'AWS::StackId']]
+      Code:
+        ZipFile: |
+          exports.handler = async () => ({ statusCode: 503, headers: { 'content-type': 'application/json' }, body: '{"error":"not deployed yet"}' });
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-api'
+      Description: Top 10 API for Cinderella's Midnight Maze (reached through CloudFront at /api/*)
+      ProtocolType: HTTP
+
+  ApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ApiFunction.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 8000
+
+  RouteGetScores:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /api/scores
+      Target: !Sub 'integrations/${ApiIntegration}'
+
+  RoutePostScores:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /api/scores
+      Target: !Sub 'integrations/${ApiIntegration}'
+
+  RoutePostSession:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /api/session
+      Target: !Sub 'integrations/${ApiIntegration}'
+
+  ApiAccessLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/apigateway/${AWS::StackName}-api'
+      RetentionInDays: 14
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: $default
+      AutoDeploy: true
+      DefaultRouteSettings: # the overall rate limit; extra requests get 429 Too Many Requests
+        ThrottlingRateLimit: !FindInMap [Api, Throttle, RatePerSecond]
+        ThrottlingBurstLimit: !FindInMap [Api, Throttle, Burst]
+      AccessLogSettings:
+        DestinationArn: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${ApiAccessLogs}'
+        Format: '{"requestId":"$context.requestId","route":"$context.routeKey","status":"$context.status","latencyMs":"$context.responseLatency","error":"$context.integrationErrorMessage"}'
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApiFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
+
+  # Top 10 lists may be cached for a few seconds (the API says how long); everything else isn't.
+  ApiCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub '${AWS::StackName}-api'
+        Comment: Top 10 API - honour the API's short cache times, keyed by board
+        MinTTL: 0
+        DefaultTTL: 0
+        MaxTTL: 10
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingBrotli: true
+          HeadersConfig:
+            HeaderBehavior: none
+          CookiesConfig:
+            CookieBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: whitelist
+            QueryStrings: [board]
+
+  # Passes the visitor's address on, so the API can limit each player.
+  ApiOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub '${AWS::StackName}-api'
+        Comment: Top 10 API - forward the viewer address and content type
+        HeadersConfig:
+          HeaderBehavior: whitelist
+          Headers: [CloudFront-Viewer-Address, Content-Type]
+        CookiesConfig:
+          CookieBehavior: none
+        QueryStringsConfig:
+          QueryStringBehavior: none
+
+  # ---------- Alerts by email ----------
+
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Cinderella Maze alerts
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref BudgetEmail
+
+  ApiCrashAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: The Top 10 function crashed or timed out
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{ Name: FunctionName, Value: !Ref ApiFunction }]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  ApiThrottledAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: AWS turned away Top 10 requests because too many ran at once
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions: [{ Name: FunctionName, Value: !Ref ApiFunction }]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  ApiServerErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: The Top 10 API answered with server errors (5xx)
+      Namespace: AWS/ApiGateway
+      MetricName: 5xx
+      Dimensions: [{ Name: ApiId, Value: !Ref HttpApi }, { Name: Stage, Value: $default }]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  ApiRequestSpikeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Unusually many refused Top 10 requests (4xx) - someone may be hammering the API
+      Namespace: AWS/ApiGateway
+      MetricName: 4xx
+      Dimensions: [{ Name: ApiId, Value: !Ref HttpApi }, { Name: Stage, Value: $default }]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 300
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  RefusedScoresAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Many unbelievable scores in an hour - someone may be trying to cheat
+      Namespace: CinderellaMaze
+      MetricName: ScoreRefused
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  RateLimitedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Players hit the per-player request limit many times in an hour
+      Namespace: CinderellaMaze
+      MetricName: RateLimited
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 20
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
 
   CostAlert:
     Type: AWS::Budgets::Budget
@@ -219,3 +542,9 @@ Outputs:
   DeployRoleArn:
     Description: GitHub variable AWS_DEPLOY_ROLE_ARN
     Value: !GetAtt DeployRole.Arn
+  ApiFunctionName:
+    Description: GitHub variable API_FUNCTION_NAME
+    Value: !Ref ApiFunction
+  ScoresTableName:
+    Description: DynamoDB table holding the Top 10
+    Value: !Ref ScoresTable
