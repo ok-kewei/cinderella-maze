@@ -154,7 +154,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
   text-wrap: balance;
 }
 .card p { margin: 0; font-size: 20px; font-weight: 600; }
-.card .preview { display: block; width: auto; height: min(240px, 30vh); aspect-ratio: 240 / 308; border-radius: 8px; border: 1px solid rgba(201, 212, 255, .35); box-shadow: 0 6px 24px rgba(0, 0, 0, .45); } /* the gameplay clip on the start screen */
+.card .preview { display: block; width: auto; height: min(380px, 46vh); aspect-ratio: 320 / 411; border-radius: 8px; border: 1px solid rgba(201, 212, 255, .35); box-shadow: 0 6px 24px rgba(0, 0, 0, .45); } /* the gameplay clip on the start screen */
+@media (max-width: 520px) { .card .preview { height: min(300px, 36vh); } }
 .card .score-line { font-family: var(--f-arcade); font-size: 14px; letter-spacing: .06em; color: var(--rose); }
 .btn {
   font-family: var(--f-arcade);
@@ -1480,7 +1481,7 @@ function resetPositions() {
   for (const g of ghosts) g.argueT = 0;
 }
 function setState(s, readyDur) { G.state = s; G.stateTime = 0; if (readyDur) G.readyDur = readyDur; }
-const REACHED_KEY = 'cinderella-maze-reached', EASY_KEY = 'cinderella-maze-easy';
+const REACHED_KEY = 'cinderella-maze-reached';
 let reachedHere = 1; // works even when the browser won't let the page save anything
 let ownerView = false; // the game's owner can start from any level
 const reachedLevel = () => ownerView ? FINAL_LEVEL : Math.min(PRIZES.length, Math.max(1, reachedHere, parseInt(lsGet(REACHED_KEY, 1), 10) || 1));
@@ -1504,7 +1505,7 @@ function newGame(level) {
   else if (!G.practice) G.startLevel = 1;
   G.practice = G.startLevel > 1; // games started above level 1 are practice and stay off the Top 10
   const easyBox = document.getElementById('easy-mode');
-  if (easyBox) { G.easy = easyBox.checked; lsSet(EASY_KEY, G.easy); }
+  if (easyBox) G.easy = easyBox.checked;
   G.score = 0; G.lives = 5; G.level = G.startLevel; G.saved = false; G.completed = false; G.nextLife = 10000; G.wand = 1; G.popups = []; G.particles = [];
   G.gameNo = (G.gameNo || 0) + 1; G.session = null; startSession(); flushPending();
   G.paused = false; hideOverlay();
@@ -2803,7 +2804,7 @@ function showOverlay(kind, opts) {
   if (kind === 'title') {
     html = `<div class="card">
       <h2>Ready for the ball?</h2>
-      <img class="preview" src="assets/preview.gif" width="240" height="308" alt="A few seconds of play: Cinderella gathers pearls and chases the stepfamily, now mice, past the palace fountain" onerror="this.hidden = true">
+      <img class="preview" src="assets/preview.gif" width="320" height="411" alt="A few seconds of play: Cinderella gathers pearls and chases the stepfamily, now mice, past the palace fountain" onerror="this.hidden = true">
       <button class="btn" data-action="start" type="button">Start the night</button>
       ${reachedLevel() > 1 ? '<button class="link-btn" data-action="practice-pick" type="button">Practice a level</button>' : ''}
       </div>`;
@@ -3120,8 +3121,8 @@ function snapshot() {
   return { score: G.score, lives: G.lives, level: G.level, nextLife: G.nextLife, state: G.state, dots: Array.from(dots) };
 }
 function start(data) {
-  try { document.getElementById('easy-mode').checked = lsGet(EASY_KEY, false) === true; } catch (e) { /* ignore */ }
-  document.getElementById('easy-mode').addEventListener('change', e => { lsSet(EASY_KEY, e.target.checked); if (G.state === 'title') G.easy = e.target.checked; e.target.blur(); });
+  document.getElementById('easy-mode').checked = false; // every visit starts in normal mode; players choose Easy each time
+  document.getElementById('easy-mode').addEventListener('change', e => { if (G.state === 'title') G.easy = e.target.checked; e.target.blur(); });
   // Testing shortcut: opening the game with #alllevels at the end of its link unlocks every level on this device.
   try { if (location.hash === '#alllevels') setReached(FINAL_LEVEL); } catch (e) { /* ignore */ }
   fillDots(); resetPositions();
