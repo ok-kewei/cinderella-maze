@@ -2709,7 +2709,7 @@ function renderBoardRows() {
   };
   if (!top.length) {
     const tr = document.createElement('tr'), td = document.createElement('td');
-    td.colSpan = 4; td.textContent = 'No scores yet. Finish a game to be the first.'; td.style.textAlign = 'center';
+    td.colSpan = 4; td.textContent = boardTab === 'easy' ? 'No Easy dancers yet. Be the first!' : 'No scores yet. Finish a game to be the first.'; td.style.textAlign = 'center';
     tr.appendChild(td); body.appendChild(tr);
   }
   let shown = false;

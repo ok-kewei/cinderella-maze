@@ -1,5 +1,7 @@
 # 🏰 Cinderella's Midnight Maze
 
+[![Check](https://github.com/ok-kewei/cinderella-maze/actions/workflows/check.yml/badge.svg)](https://github.com/ok-kewei/cinderella-maze/actions/workflows/check.yml)
+
 **The clock strikes midnight!** The stepfamily is chasing Cinderella through the palace halls. Collect every pearl, grab a glass slipper to turn them into mice, and outrun them through 20 levels to reach her happily ever after.
 
 ### ▶ [Play the game](https://djupknnfwqky.cloudfront.net)
@@ -84,6 +86,22 @@ You need [Node.js](https://nodejs.org) (version 18 or later).
    The build creates a new folder, `dist`, with one file inside: `index.html`. That's the game (`cinderella-maze.html`) wrapped as a complete web page, ready for a browser. The `dist` folder isn't stored in git, because the build can always recreate it.
 
 3. **Play it:** open `dist/index.html` in your web browser, for example by double-clicking it in your file manager. Opened this way, the Top 10 is kept on your device only.
+
+## 🧪 Testing
+
+- **Unit tests** (`api/test/`): `node --test api/test/*.test.mjs` tests the Top 10 API's name rules, score limits, per-player limits, and that each game saves only one score. They run against an in-memory stand-in for DynamoDB, so they need no AWS account.
+- **Smoke test** (`scripts/smoke.mjs`): after every deploy, checks that the live page loads and the Top 10 answers.
+- **CI:** every pull request runs the checks and unit tests on GitHub Actions; each run's log shows every test's result.
+
+## 🔒 Security
+
+- **Private storage, HTTPS only:** the S3 bucket blocks all public access, is encrypted and versioned, and only CloudFront can read it. CloudFront serves everything over HTTPS with security headers.
+- **No stored AWS keys:** GitHub signs in to AWS with short-lived OIDC tokens. The deploy role only trusts this repository's `main` branch, and can only update this site and its Top 10 function.
+- **API reachable only through CloudFront:** CloudFront adds a secret header that the API checks, so requests sent straight to API Gateway are refused.
+- **Least privilege:** the Top 10 function can only read and write its own table and logs.
+- **Player privacy:** visitor addresses are used only for rate limits, and stored only as salted hashes that expire within hours.
+- **Abuse protection:** checked scores and names, an overall rate limit, per-player limits, and a DynamoDB throughput ceiling (see [How a score reaches the Top 10](#how-a-score-reaches-the-top-10)).
+- **Alerts:** CloudWatch alarms email the owner on errors, traffic spikes or cheating attempts, and a budget alert emails on cost.
 
 ## 📦 CI/CD & Deployment Guide
 
